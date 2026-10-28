@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+    "paths": { "@jamo/core": ["../core/src/index.ts"] }
+  },
+  "include": ["src/**/*.ts"],
+  "references": [{ "path": "../core" }]
+}
