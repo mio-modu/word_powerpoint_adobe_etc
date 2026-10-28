@@ -10,6 +10,7 @@ import {
   textContent,
   type DocMeta,
   type JamoPresentation,
+  type CharStyle,
   type JamoShape,
   type JamoSlide,
   type XmlElement,
@@ -30,6 +31,7 @@ import {
 } from './templates.js';
 import {
   buildParagraph,
+  buildRunProps,
   buildTextBox,
   paragraphRuns,
   paragraphText,
@@ -335,6 +337,25 @@ export class PptxFile {
 
   static setParagraphText(p: XmlElement, value: string): void {
     setParagraphText(p, value);
+  }
+
+  /**
+   * 도형 전체의 글자 서식을 바꾼다.
+   *
+   * 슬라이드에서는 한 도형이 하나의 글상자 역할을 하므로, 선택 영역 대신
+   * 도형 단위로 적용하는 쪽이 실제 사용과 맞는다.
+   */
+  static setShapeStyle(sp: XmlElement, patch: Partial<CharStyle>): void {
+    for (const p of shapeParagraphs(sp)) {
+      for (const run of paragraphRuns(p)) {
+        const merged: CharStyle = { ...(readRunStyle(run) ?? {}), ...patch };
+        const rPr = firstChild(run, 'a:rPr');
+        const rebuilt = buildRunProps(merged, rPr ? (attr(rPr, 'lang') ?? 'ko-KR') : 'ko-KR');
+        if (rPr) run.children[run.children.indexOf(rPr)] = rebuilt;
+        else run.children.unshift(rebuilt);
+        run.selfClosed = false;
+      }
+    }
   }
 
   /** 도형의 텍스트 전체를 줄 단위로 바꾼다. */

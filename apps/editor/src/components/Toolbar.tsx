@@ -6,6 +6,7 @@ export interface ToolbarProps {
   zoom: number;
   onZoomChange: (zoom: number) => void;
   fileSystemAccess: boolean;
+  onShowHelp: () => void;
 }
 
 export function Toolbar({
@@ -13,9 +14,11 @@ export function Toolbar({
   zoom,
   onZoomChange,
   fileSystemAccess,
+  onShowHelp,
 }: ToolbarProps): JSX.Element {
   const { state } = session;
   const isDeck = state?.kind === 'pptx';
+  const inTable = session.focus.table !== undefined;
 
   return (
     <header className="toolbar">
@@ -26,7 +29,7 @@ export function Toolbar({
 
       <div className="toolbar-group">
         <button type="button" onClick={() => void session.open()} disabled={session.busy}>
-          파일 열기
+          열기
         </button>
         <div className="menu">
           <button type="button">새 문서 ▾</button>
@@ -60,7 +63,7 @@ export function Toolbar({
               저장{state.dirty ? ' •' : ''}
             </button>
             <div className="menu">
-              <button type="button">다른 형식으로 ▾</button>
+              <button type="button">변환 ▾</button>
               <div className="menu-items">
                 <button type="button" onClick={() => void session.saveAsFormat('hwpx')}>
                   한글 .hwpx 로 내보내기
@@ -74,6 +77,67 @@ export function Toolbar({
               </div>
             </div>
           </div>
+
+          <div className="toolbar-group">
+            <button
+              type="button"
+              title="되돌리기 (Ctrl+Z)"
+              disabled={!state.canUndo || state.readOnly}
+              onClick={session.undo}
+            >
+              ↶
+            </button>
+            <button
+              type="button"
+              title="다시 실행 (Ctrl+Y)"
+              disabled={!state.canRedo || state.readOnly}
+              onClick={session.redo}
+            >
+              ↷
+            </button>
+          </div>
+
+          {!isDeck && !state.readOnly && (
+            <div className="menu">
+              <button type="button" className={inTable ? 'on' : undefined}>
+                표 ▾
+              </button>
+              <div className="menu-items">
+                <button type="button" onClick={() => session.insertTable(3, 3)}>
+                  표 만들기 3×3 (Ctrl+Alt+T)
+                </button>
+                <button type="button" onClick={() => session.insertTable(2, 2)}>
+                  표 만들기 2×2
+                </button>
+                <button type="button" onClick={() => session.insertTable(5, 3)}>
+                  표 만들기 5×3
+                </button>
+                <hr />
+                <button type="button" disabled={!inTable} onClick={() => session.tableCommand('rowBelow')}>
+                  아래에 줄 추가 (Ctrl+Alt+↓)
+                </button>
+                <button type="button" disabled={!inTable} onClick={() => session.tableCommand('rowAbove')}>
+                  위에 줄 추가 (Ctrl+Alt+↑)
+                </button>
+                <button type="button" disabled={!inTable} onClick={() => session.tableCommand('columnRight')}>
+                  오른쪽에 칸 추가 (Ctrl+Alt+→)
+                </button>
+                <button type="button" disabled={!inTable} onClick={() => session.tableCommand('columnLeft')}>
+                  왼쪽에 칸 추가 (Ctrl+Alt+←)
+                </button>
+                <hr />
+                <button type="button" disabled={!inTable} onClick={() => session.tableCommand('deleteRow')}>
+                  줄 지우기
+                </button>
+                <button type="button" disabled={!inTable} onClick={() => session.tableCommand('deleteColumn')}>
+                  칸 지우기
+                </button>
+                <button type="button" disabled={!inTable} onClick={() => session.tableCommand('deleteTable')}>
+                  표 지우기
+                </button>
+              </div>
+            </div>
+          )}
 
           {!isDeck && (
             <div className="toolbar-group zoom">
@@ -93,10 +157,19 @@ export function Toolbar({
             {state.readOnly && <span className="badge">읽기 전용</span>}
           </div>
 
+          <button type="button" className="ghost" title="단축키 (F1)" onClick={onShowHelp}>
+            단축키
+          </button>
           <button type="button" className="ghost" onClick={session.close}>
             닫기
           </button>
         </>
+      )}
+
+      {!state && (
+        <button type="button" className="ghost" style={{ marginLeft: 'auto' }} onClick={onShowHelp}>
+          단축키 (F1)
+        </button>
       )}
 
       {!fileSystemAccess && (

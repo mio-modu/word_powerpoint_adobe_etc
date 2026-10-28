@@ -489,3 +489,246 @@ button.ghost {
     min-width: 160px;
   }
 }
+
+/* ------------------------------------------------------------- 서식 도구막대 */
+
+.formatbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 12px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.formatbar button {
+  min-width: 32px;
+  padding: 4px 8px;
+}
+
+button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.size-select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 5px 6px;
+}
+
+.swatches {
+  display: flex;
+  gap: 3px;
+}
+
+.swatch {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+/* 정렬 버튼은 선 세 개로 모양을 만든다. 아이콘 폰트를 쓰지 않기 위함. */
+.align {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  justify-content: center;
+  padding: 6px 8px;
+}
+
+.align span {
+  display: block;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+  width: 14px;
+}
+
+.align span:nth-child(2) {
+  width: 9px;
+}
+
+.align-center {
+  align-items: center;
+}
+
+.align-right {
+  align-items: flex-end;
+}
+
+.align-justify span:nth-child(2) {
+  width: 14px;
+}
+
+/* ------------------------------------------------------------------- 표 */
+
+.doc-table {
+  border-collapse: collapse;
+  margin: 6px 0;
+  table-layout: fixed;
+  max-width: 100%;
+}
+
+.doc-table td {
+  border: 1px solid #333333;
+  padding: 3px 6px;
+  vertical-align: middle;
+  word-break: break-word;
+}
+
+.doc-table-active {
+  outline: 2px solid rgba(31, 111, 235, 0.35);
+  outline-offset: 2px;
+}
+
+.doc-table .cell-focused {
+  background: rgba(31, 111, 235, 0.08);
+}
+
+.doc-table .para {
+  margin: 0;
+}
+
+.para-focused {
+  /* 커서가 어느 문단에 있는지 은은하게만 알린다. 종이 느낌을 해치지 않도록. */
+  box-shadow: -6px 0 0 -4px var(--accent);
+}
+
+/* --------------------------------------------------------------- 겹침 창 */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 16, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 50;
+}
+
+.sheet {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  width: min(900px, 100%);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  padding: 20px 24px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sheet-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.sheet-head p {
+  margin: 0;
+  grid-column: 1;
+  font-size: 13px;
+}
+
+.sheet-head button {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: start;
+}
+
+.sheet-body {
+  overflow: auto;
+  padding: 8px 24px 24px;
+}
+
+.key-group {
+  margin-top: 18px;
+}
+
+.key-group h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.key-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.key-table th {
+  text-align: left;
+  font-weight: 500;
+  padding: 5px 12px 5px 0;
+  width: 180px;
+  vertical-align: top;
+}
+
+.key-table td {
+  padding: 5px 0;
+}
+
+.key-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 14px;
+}
+
+kbd {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--panel-2);
+  white-space: nowrap;
+}
+
+.key-origin {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.key-note {
+  font-size: 11px;
+  color: var(--ink-muted);
+  border-bottom: 1px dotted var(--ink-muted);
+  cursor: help;
+}
+
+.small {
+  font-size: 12px;
+}
+
+.menu-items hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 4px 2px;
+}
+
+.menu-items button:disabled {
+  opacity: 0.4;
+}
+
+.banner button {
+  flex-shrink: 0;
+}

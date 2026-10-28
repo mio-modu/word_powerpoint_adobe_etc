@@ -1,4 +1,4 @@
-import { hwpunit, type JamoPresentation, type JamoShape } from '@jamo/core';
+import { hwpunit, type JamoPresentation, type JamoShape, type XmlElement } from '@jamo/core';
 import { useState, type CSSProperties } from 'react';
 import { Editable } from './Editable.js';
 
@@ -13,6 +13,7 @@ export interface SlideDeckViewProps {
   deck: JamoPresentation;
   readOnly: boolean;
   onShapeChange: (source: unknown, lines: string[]) => void;
+  onShapeFocus: (shape: XmlElement | undefined, slideIndex: number) => void;
   onAddSlide: () => void;
   onRemoveSlide: (index: number) => void;
 }
@@ -24,6 +25,7 @@ export function SlideDeckView({
   deck,
   readOnly,
   onShapeChange,
+  onShapeFocus,
   onAddSlide,
   onRemoveSlide,
 }: SlideDeckViewProps): JSX.Element {
@@ -68,6 +70,7 @@ export function SlideDeckView({
                   shape={shape}
                   scale={scale}
                   readOnly={readOnly}
+                  onFocus={() => onShapeFocus(shape.source as XmlElement | undefined, index)}
                   onChange={(lines) => onShapeChange(shape.source, lines)}
                 />
               ))}
@@ -95,11 +98,13 @@ function ShapeBox({
   shape,
   scale,
   readOnly,
+  onFocus,
   onChange,
 }: {
   shape: JamoShape;
   scale: number;
   readOnly: boolean;
+  onFocus: () => void;
   onChange: (lines: string[]) => void;
 }): JSX.Element {
   const frame = shape.frame;
@@ -145,6 +150,7 @@ function ShapeBox({
           style={textStyle}
           value={text}
           placeholder="텍스트를 입력하세요"
+          onFocus={onFocus}
           onCommit={(next) => onChange(next.split('\n'))}
         />
       )}

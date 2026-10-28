@@ -1,31 +1,175 @@
-import { useCallback, useEffect, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
+import { FormatBar } from './components/FormatBar.js';
+import { ShortcutHelp } from './components/ShortcutHelp.js';
 import { SlideDeckView } from './components/SlideDeckView.js';
 import { TextDocumentView } from './components/TextDocumentView.js';
 import { Toolbar } from './components/Toolbar.js';
 import { supportsFileSystemAccess } from './lib/fs.js';
+import { keyOf, matchBinding, type CommandId } from './lib/keymap.js';
 import { useSession } from './session.js';
+
+const ZOOM_STEP = 0.1;
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 2;
 
 export function App(): JSX.Element {
   const session = useSession();
   const [zoom, setZoom] = useState(1);
   const [dragging, setDragging] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const pendingKey = useRef<string | undefined>(undefined);
+  const pendingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const fileSystemAccess = supportsFileSystemAccess();
 
-  // Ctrl+S 로 저장. 브라우저의 "페이지 저장"을 가로챈다.
+  const run = useCallback(
+    (command: CommandId) => {
+      const char = session.currentCharStyle();
+      switch (command) {
+        case 'open':
+          void session.open();
+          break;
+        case 'save':
+          void session.save();
+          break;
+        case 'saveAsHwpx':
+          void session.saveAsFormat('hwpx');
+          break;
+        case 'saveAsDocx':
+          void session.saveAsFormat('docx');
+          break;
+        case 'saveAsPptx':
+          void session.saveAsFormat('pptx');
+          break;
+        case 'newHwpx':
+          session.createNew('hwpx');
+          break;
+        case 'newDocx':
+          session.createNew('docx');
+          break;
+        case 'newPptx':
+          session.createNew('pptx');
+          break;
+        case 'undo':
+          session.undo();
+          break;
+        case 'redo':
+          session.redo();
+          break;
+        case 'bold':
+          session.applyCharStyle({ bold: !char?.bold });
+          break;
+        case 'italic':
+          session.applyCharStyle({ italic: !char?.italic });
+          break;
+        case 'underline':
+          session.applyCharStyle({ underline: !char?.underline });
+          break;
+        case 'strike':
+          session.applyCharStyle({ strikeout: !char?.strikeout });
+          break;
+        case 'superscript':
+          session.applyCharStyle({ superscript: !char?.superscript, subscript: false });
+          break;
+        case 'subscript':
+          session.applyCharStyle({ subscript: !char?.subscript, superscript: false });
+          break;
+        case 'fontSizeUp':
+          session.applyCharStyle({ fontSize: Math.min((char?.fontSize ?? 10) + 1, 300) });
+          break;
+        case 'fontSizeDown':
+          session.applyCharStyle({ fontSize: Math.max((char?.fontSize ?? 10) - 1, 1) });
+          break;
+        case 'alignLeft':
+          session.applyParagraphStyle({ align: 'left' });
+          break;
+        case 'alignCenter':
+          session.applyParagraphStyle({ align: 'center' });
+          break;
+        case 'alignRight':
+          session.applyParagraphStyle({ align: 'right' });
+          break;
+        case 'alignJustify':
+          session.applyParagraphStyle({ align: 'justify' });
+          break;
+        case 'indent': {
+          const current = session.currentParagraphStyle()?.indentLeft ?? 0;
+          // 한 칸은 2글자 폭 (10pt 기준 2000 HWPUNIT).
+          session.applyParagraphStyle({ indentLeft: current + 2000 });
+          break;
+        }
+        case 'outdent': {
+          const current = session.currentParagraphStyle()?.indentLeft ?? 0;
+          session.applyParagraphStyle({ indentLeft: Math.max(current - 2000, 0) });
+          break;
+        }
+        case 'insertTable':
+          session.insertTable(3, 3);
+          break;
+        case 'rowBelow':
+        case 'rowAbove':
+        case 'deleteRow':
+        case 'columnRight':
+        case 'columnLeft':
+        case 'deleteColumn':
+        case 'deleteTable':
+          session.tableCommand(command);
+          break;
+        case 'addSlide':
+          session.addSlide();
+          break;
+        case 'zoomIn':
+          setZoom((z) => Math.min(z + ZOOM_STEP, ZOOM_MAX));
+          break;
+        case 'zoomOut':
+          setZoom((z) => Math.max(z - ZOOM_STEP, ZOOM_MIN));
+          break;
+        case 'zoomReset':
+          setZoom(1);
+          break;
+        case 'help':
+          setHelpOpen((open) => !open);
+          break;
+      }
+    },
+    [session],
+  );
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-        event.preventDefault();
-        void session.save();
+      if (event.key === 'Escape') {
+        if (helpOpen) {
+          event.preventDefault();
+          setHelpOpen(false);
+        }
+        pendingKey.current = undefined;
+        return;
       }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o') {
+      // 한글 입력 조합 중에는 키를 가로채지 않는다. 가로채면 조합이 깨진다.
+      if (event.isComposing) return;
+
+      const key = keyOf(event);
+      const { command, pending } = matchBinding(key, pendingKey.current);
+
+      if (pending) {
         event.preventDefault();
-        void session.open();
+        pendingKey.current = pending;
+        clearTimeout(pendingTimer.current);
+        // 연속 키의 뒷부분을 한참 안 누르면 없던 일로 한다.
+        pendingTimer.current = setTimeout(() => {
+          pendingKey.current = undefined;
+        }, 2000);
+        return;
       }
+      pendingKey.current = undefined;
+      if (!command) return;
+
+      event.preventDefault();
+      run(command);
     };
+
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [session]);
+  }, [helpOpen, run]);
 
   // 저장하지 않은 변경이 있으면 떠날 때 물어본다.
   useEffect(() => {
@@ -68,11 +212,19 @@ export function App(): JSX.Element {
         zoom={zoom}
         onZoomChange={setZoom}
         fileSystemAccess={fileSystemAccess}
+        onShowHelp={() => setHelpOpen(true)}
       />
+
+      {state && !state.readOnly && (
+        <FormatBar session={session} disabled={session.busy} isDeck={state.kind === 'pptx'} />
+      )}
 
       {session.error && (
         <div className="banner banner-error">
           <pre>{session.error}</pre>
+          <button type="button" onClick={session.dismissError}>
+            닫기
+          </button>
         </div>
       )}
 
@@ -96,6 +248,7 @@ export function App(): JSX.Element {
             deck={presentation}
             readOnly={state.readOnly}
             onShapeChange={session.setShapeText}
+            onShapeFocus={(shape, slideIndex) => session.setFocus({ shape, slideIndex })}
             onAddSlide={session.addSlide}
             onRemoveSlide={session.removeSlide}
           />
@@ -106,6 +259,8 @@ export function App(): JSX.Element {
             document={textDocument}
             readOnly={state.readOnly}
             zoom={zoom}
+            focus={session.focus}
+            onFocus={session.setFocus}
             onParagraphChange={session.setParagraphText}
             onParagraphSplit={(source) => session.addParagraph(source, '')}
             onParagraphRemove={session.removeParagraph}
@@ -113,6 +268,7 @@ export function App(): JSX.Element {
         )}
       </main>
 
+      {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
       {dragging && <div className="drop-overlay">여기에 놓으면 열립니다</div>}
     </div>
   );
@@ -148,7 +304,7 @@ function WelcomeScreen({
         </button>
       </div>
 
-      <p className="muted">창으로 파일을 끌어다 놓아도 열립니다.</p>
+      <p className="muted">창으로 파일을 끌어다 놓아도 열립니다. 단축키는 F1.</p>
 
       <ul className="facts">
         <li>
@@ -156,12 +312,12 @@ function WelcomeScreen({
           서버로 올리는 과정이 없습니다.
         </li>
         <li>
-          <strong>원본을 망가뜨리지 않습니다.</strong> 표·이미지·테마처럼 아직 편집 기능이 없는
+          <strong>원본을 망가뜨리지 않습니다.</strong> 이미지·차트·테마처럼 아직 편집 기능이 없는
           부분은 원본 그대로 두고, 고친 곳만 다시 씁니다.
         </li>
         <li>
-          <strong>구형 <code>.hwp</code> 는 읽기 전용입니다.</strong> 열어서 <code>.hwpx</code> 나{' '}
-          <code>.docx</code> 로 바꾼 뒤 편집하세요.
+          <strong>워드 키와 한글 키를 둘 다 받습니다.</strong> 가운데 정렬이 워드는 Ctrl+E,
+          한글은 Ctrl+Shift+C 인데 둘 다 동작합니다.
         </li>
       </ul>
     </section>

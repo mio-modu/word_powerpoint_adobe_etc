@@ -20,6 +20,8 @@ export interface EditableProps {
   style?: CSSProperties;
   className?: string;
   placeholder?: string;
+  /** 커서가 들어왔을 때. 서식 명령이 어디에 적용될지 정하는 데 쓴다. */
+  onFocus?: () => void;
 }
 
 export function Editable({
@@ -31,6 +33,7 @@ export function Editable({
   style,
   className,
   placeholder,
+  onFocus,
 }: EditableProps): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -77,6 +80,7 @@ export function Editable({
       suppressContentEditableWarning
       spellCheck={false}
       data-placeholder={placeholder}
+      onFocus={onFocus}
       onBlur={commit}
       onKeyDown={handleKeyDown}
     />
