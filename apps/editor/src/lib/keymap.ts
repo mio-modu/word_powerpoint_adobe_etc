@@ -44,6 +44,8 @@ export type CommandId =
   | 'columnLeft'
   | 'deleteColumn'
   | 'deleteTable'
+  | 'mergeCells'
+  | 'splitCell'
   | 'addSlide'
   | 'zoomIn'
   | 'zoomOut'
@@ -105,6 +107,8 @@ export const COMMANDS: CommandInfo[] = [
   { id: 'columnRight', label: '오른쪽에 칸 추가', group: '표', textOnly: true },
   { id: 'columnLeft', label: '왼쪽에 칸 추가', group: '표', textOnly: true },
   { id: 'deleteColumn', label: '칸 지우기', group: '표', textOnly: true },
+  { id: 'mergeCells', label: '셀 합치기', group: '표', textOnly: true },
+  { id: 'splitCell', label: '셀 나누기', group: '표', textOnly: true },
   { id: 'deleteTable', label: '표 지우기', group: '표', textOnly: true },
 
   { id: 'addSlide', label: '슬라이드 추가', group: '슬라이드', slidesOnly: true },
@@ -154,6 +158,8 @@ export const BINDINGS: KeyBinding[] = [
   { command: 'columnLeft', key: 'ctrl+alt+left', origin: '자모' },
   { command: 'deleteRow', key: 'ctrl+alt+shift+down', origin: '자모' },
   { command: 'deleteColumn', key: 'ctrl+alt+shift+right', origin: '자모' },
+  { command: 'mergeCells', key: 'ctrl+alt+m', origin: '자모' },
+  { command: 'splitCell', key: 'ctrl+alt+shift+m', origin: '자모' },
 
   { command: 'addSlide', key: 'ctrl+m', origin: '파워포인트' },
 

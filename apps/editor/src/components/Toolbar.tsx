@@ -1,5 +1,7 @@
 import { KIND_LABEL } from '../lib/formats.js';
 import type { SessionApi } from '../session.js';
+import { Menu } from './Menu.js';
+import { TableGridPicker } from './TableGridPicker.js';
 
 export interface ToolbarProps {
   session: SessionApi;
@@ -31,20 +33,21 @@ export function Toolbar({
         <button type="button" onClick={() => void session.open()} disabled={session.busy}>
           열기
         </button>
-        <div className="menu">
-          <button type="button">새 문서 ▾</button>
-          <div className="menu-items">
-            <button type="button" onClick={() => session.createNew('hwpx')}>
-              한글 문서 (.hwpx)
-            </button>
-            <button type="button" onClick={() => session.createNew('docx')}>
-              워드 문서 (.docx)
-            </button>
-            <button type="button" onClick={() => session.createNew('pptx')}>
-              파워포인트 (.pptx)
-            </button>
-          </div>
-        </div>
+        <Menu label="새 문서 ▾">
+          {(close) => (
+            <>
+              <button type="button" onClick={() => { session.createNew('hwpx'); close(); }}>
+                한글 문서 (.hwpx)
+              </button>
+              <button type="button" onClick={() => { session.createNew('docx'); close(); }}>
+                워드 문서 (.docx)
+              </button>
+              <button type="button" onClick={() => { session.createNew('pptx'); close(); }}>
+                파워포인트 (.pptx)
+              </button>
+            </>
+          )}
+        </Menu>
       </div>
 
       {state && (
@@ -62,20 +65,21 @@ export function Toolbar({
             >
               저장{state.dirty ? ' •' : ''}
             </button>
-            <div className="menu">
-              <button type="button">변환 ▾</button>
-              <div className="menu-items">
-                <button type="button" onClick={() => void session.saveAsFormat('hwpx')}>
-                  한글 .hwpx 로 내보내기
-                </button>
-                <button type="button" onClick={() => void session.saveAsFormat('docx')}>
-                  워드 .docx 로 내보내기
-                </button>
-                <button type="button" onClick={() => void session.saveAsFormat('pptx')}>
-                  파워포인트 .pptx 로 내보내기
-                </button>
-              </div>
-            </div>
+            <Menu label="변환 ▾">
+              {(close) => (
+                <>
+                  <button type="button" onClick={() => { void session.saveAsFormat('hwpx'); close(); }}>
+                    한글 .hwpx 로 내보내기
+                  </button>
+                  <button type="button" onClick={() => { void session.saveAsFormat('docx'); close(); }}>
+                    워드 .docx 로 내보내기
+                  </button>
+                  <button type="button" onClick={() => { void session.saveAsFormat('pptx'); close(); }}>
+                    파워포인트 .pptx 로 내보내기
+                  </button>
+                </>
+              )}
+            </Menu>
           </div>
 
           <div className="toolbar-group">
@@ -98,45 +102,21 @@ export function Toolbar({
           </div>
 
           {!isDeck && !state.readOnly && (
-            <div className="menu">
-              <button type="button" className={inTable ? 'on' : undefined}>
-                표 ▾
-              </button>
-              <div className="menu-items">
-                <button type="button" onClick={() => session.insertTable(3, 3)}>
-                  표 만들기 3×3 (Ctrl+Alt+T)
-                </button>
-                <button type="button" onClick={() => session.insertTable(2, 2)}>
-                  표 만들기 2×2
-                </button>
-                <button type="button" onClick={() => session.insertTable(5, 3)}>
-                  표 만들기 5×3
-                </button>
-                <hr />
-                <button type="button" disabled={!inTable} onClick={() => session.tableCommand('rowBelow')}>
-                  아래에 줄 추가 (Ctrl+Alt+↓)
-                </button>
-                <button type="button" disabled={!inTable} onClick={() => session.tableCommand('rowAbove')}>
-                  위에 줄 추가 (Ctrl+Alt+↑)
-                </button>
-                <button type="button" disabled={!inTable} onClick={() => session.tableCommand('columnRight')}>
-                  오른쪽에 칸 추가 (Ctrl+Alt+→)
-                </button>
-                <button type="button" disabled={!inTable} onClick={() => session.tableCommand('columnLeft')}>
-                  왼쪽에 칸 추가 (Ctrl+Alt+←)
-                </button>
-                <hr />
-                <button type="button" disabled={!inTable} onClick={() => session.tableCommand('deleteRow')}>
-                  줄 지우기
-                </button>
-                <button type="button" disabled={!inTable} onClick={() => session.tableCommand('deleteColumn')}>
-                  칸 지우기
-                </button>
-                <button type="button" disabled={!inTable} onClick={() => session.tableCommand('deleteTable')}>
-                  표 지우기
-                </button>
-              </div>
-            </div>
+            <Menu label="표 ▾" title="표 만들기 (Ctrl+Alt+T)" active={inTable} wide>
+              {(close) => (
+                <>
+                  <TableGridPicker
+                    onPick={(rows, cols) => {
+                      session.insertTable(rows, cols);
+                      close();
+                    }}
+                  />
+                  <p className="muted small picker-note">
+                    표 안에 커서를 두면 줄·칸 추가와 셀 합치기 도구가 위에 나타납니다.
+                  </p>
+                </>
+              )}
+            </Menu>
           )}
 
           {!isDeck && (

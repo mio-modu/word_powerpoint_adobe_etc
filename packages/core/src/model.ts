@@ -88,6 +88,8 @@ export interface JamoTableCell {
   /** HWPUNIT. */
   width?: number;
   height?: number;
+  /** 칸 배경색 `#RRGGBB`. 없으면 칠하지 않은 것. */
+  shade?: string;
   source?: unknown;
 }
 

@@ -31,6 +31,8 @@ export interface HwpxStyleTables {
   paraPr: Map<string, XmlElement>;
   /** 스타일(바탕글, 개요 1 …). */
   styles: Map<string, XmlElement>;
+  /** 테두리·배경. 표 칸의 배경색이 여기 들어 있다. */
+  borderFill: Map<string, XmlElement>;
 }
 
 export function readStyleTables(headerRoot: XmlElement): HwpxStyleTables {
@@ -40,6 +42,7 @@ export function readStyleTables(headerRoot: XmlElement): HwpxStyleTables {
     charPr: new Map(),
     paraPr: new Map(),
     styles: new Map(),
+    borderFill: new Map(),
   };
   if (!refList) return tables;
 
@@ -58,6 +61,7 @@ export function readStyleTables(headerRoot: XmlElement): HwpxStyleTables {
     }
   }
 
+  collectById(firstChild(refList, 'hh:borderFills'), 'hh:borderFill', tables.borderFill);
   collectById(firstChild(refList, 'hh:charProperties'), 'hh:charPr', tables.charPr);
   collectById(firstChild(refList, 'hh:paraProperties'), 'hh:paraPr', tables.paraPr);
   collectById(firstChild(refList, 'hh:styles'), 'hh:style', tables.styles);
@@ -228,4 +232,25 @@ export function readPageSetup(sectionRoot: XmlElement): XmlElement | undefined {
     }
   }
   return path(sectionRoot, 'hp:secPr');
+}
+
+/**
+ * borderFill 번호에서 칸 배경색을 꺼낸다.
+ *
+ * HWPX 는 칸에 색을 직접 쓰지 않고 테두리·배경 묶음을 번호로 가리킨다.
+ * 그 묶음 안의 `hc:winBrush/@faceColor` 가 실제 배경색이다. 칠하지 않은
+ * 칸은 `none` 으로 적혀 있다.
+ */
+export function cellShadeOf(
+  tables: HwpxStyleTables,
+  borderFillIDRef: string | undefined,
+): string | undefined {
+  if (borderFillIDRef === undefined) return undefined;
+  const borderFill = tables.borderFill.get(borderFillIDRef);
+  if (!borderFill) return undefined;
+  const brush = firstChild(borderFill, 'hc:fillBrush');
+  const win = brush && firstChild(brush, 'hc:winBrush');
+  const face = win && attr(win, 'faceColor');
+  if (!face || face === 'none') return undefined;
+  return face.toUpperCase();
 }

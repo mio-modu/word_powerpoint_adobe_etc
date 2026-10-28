@@ -14,7 +14,13 @@ import {
   type ParagraphStyle,
   type XmlElement,
 } from '@jamo/core';
-import { DEFAULT_TEXT_WIDTH, buildTable, wrapTableInParagraph } from './table.js';
+import {
+  DEFAULT_TEXT_WIDTH,
+  buildTable,
+  cellGrid,
+  setCellShade,
+  wrapTableInParagraph,
+} from './table.js';
 
 /**
  * 중립 모델 → HWPX.
@@ -250,6 +256,8 @@ export interface SectionBuildTarget {
   registry: StyleRegistry;
   /** 표에 쓸 테두리 ID. 없으면 표를 테두리 없이 만든다. */
   tableBorderFillIDRef?: string;
+  /** 칸 배경색을 만들려면 header.xml 루트가 필요하다. */
+  headerRoot?: XmlElement;
 }
 
 /**
@@ -374,6 +382,19 @@ function tableParagraph(table: JamoTable, target: SectionBuildTarget, id: number
     charPrIDRef: '0',
     text,
   });
+
+  // 칸 배경색을 옮긴다. 색마다 borderFill 이 하나씩 생기고 같은 색은 재사용된다.
+  const header = target.headerRoot;
+  if (header) {
+    const grid = cellGrid(tbl);
+    table.rows.forEach((row, r) => {
+      row.cells.forEach((cell) => {
+        if (!cell.shade) return;
+        const tc = grid[r]?.[cell.colAddr];
+        if (tc) setCellShade(header, tc, cell.shade, target.tableBorderFillIDRef ?? '1');
+      });
+    });
+  }
   return wrapTableInParagraph(tbl, '0', '0', id);
 }
 

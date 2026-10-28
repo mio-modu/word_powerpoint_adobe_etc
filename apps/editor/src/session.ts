@@ -48,9 +48,30 @@ export interface Focus {
   table?: XmlElement;
   row?: number;
   column?: number;
+  /**
+   * 셀 범위 선택의 시작점. Shift+클릭으로 늘린다.
+   * 이 값과 row/column 이 만드는 직사각형이 선택 범위다.
+   */
+  anchor?: { row: number; column: number };
   /** 슬라이드 도형. */
   shape?: XmlElement;
   slideIndex?: number;
+}
+
+/** 선택된 셀 범위. 없으면 undefined. */
+export function selectionRect(
+  focus: Focus,
+): { top: number; left: number; bottom: number; right: number } | undefined {
+  if (focus.table === undefined || focus.row === undefined || focus.column === undefined) {
+    return undefined;
+  }
+  const anchor = focus.anchor ?? { row: focus.row, column: focus.column };
+  return {
+    top: Math.min(anchor.row, focus.row),
+    left: Math.min(anchor.column, focus.column),
+    bottom: Math.max(anchor.row, focus.row),
+    right: Math.max(anchor.column, focus.column),
+  };
 }
 
 export interface SessionApi {
@@ -86,6 +107,11 @@ export interface SessionApi {
   currentParagraphStyle: () => ParagraphStyle | undefined;
 
   insertTable: (rows: number, cols: number) => void;
+  /** 표 맨 끝에 줄을 하나 더한다. 마지막 칸에서 Tab 을 눌렀을 때 쓴다. */
+  appendRowToTable: (table: unknown) => void;
+  mergeCells: () => void;
+  splitCell: () => void;
+  setCellShade: (color: string | undefined) => void;
   tableCommand: (
     action: 'rowBelow' | 'rowAbove' | 'deleteRow' | 'columnRight' | 'columnLeft' | 'deleteColumn' | 'deleteTable',
   ) => void;
@@ -444,6 +470,66 @@ export function useSession(): SessionApi {
     [focus, snapshot, touch],
   );
 
+  const appendRowToTable = useCallback(
+    (table: unknown) => {
+      const doc = docRef.current;
+      if (!doc || !isXmlElement(table)) return;
+      const api = doc.kind === 'hwpx' ? HwpxFile : doc.kind === 'docx' ? DocxFile : undefined;
+      if (!api) return;
+      snapshot();
+      const rows = api.grid(table).length;
+      if (api.insertRow(table, rows - 1)) touch();
+    },
+    [snapshot, touch],
+  );
+
+  const mergeCells = useCallback(() => {
+    const doc = docRef.current;
+    const tbl = focus.table;
+    const rect = selectionRect(focus);
+    if (!doc || !tbl || !rect) return;
+    const api = doc.kind === 'hwpx' ? HwpxFile : doc.kind === 'docx' ? DocxFile : undefined;
+    if (!api) return;
+    snapshot();
+    if (api.mergeCells(tbl, rect.top, rect.left, rect.bottom, rect.right)) {
+      // 합쳐진 뒤에는 범위가 의미 없다. 주인 셀 하나만 남긴다.
+      setFocus((f) => ({ ...f, row: rect.top, column: rect.left, anchor: undefined }));
+      touch();
+    }
+  }, [focus, snapshot, touch]);
+
+  const splitCell = useCallback(() => {
+    const doc = docRef.current;
+    const tbl = focus.table;
+    if (!doc || !tbl || focus.row === undefined || focus.column === undefined) return;
+    const api = doc.kind === 'hwpx' ? HwpxFile : doc.kind === 'docx' ? DocxFile : undefined;
+    if (!api) return;
+    snapshot();
+    if (api.splitCell(tbl, focus.row, focus.column)) {
+      setFocus((f) => ({ ...f, anchor: undefined }));
+      touch();
+    }
+  }, [focus, snapshot, touch]);
+
+  const setCellShade = useCallback(
+    (color: string | undefined) => {
+      const doc = docRef.current;
+      const tbl = focus.table;
+      const rect = selectionRect(focus);
+      if (!doc || !tbl || !rect) return;
+      if (doc.kind !== 'hwpx' && doc.kind !== 'docx') return;
+      snapshot();
+      // 선택한 범위 전체에 칠한다. 한 칸만 골랐으면 그 칸만.
+      for (let r = rect.top; r <= rect.bottom; r += 1) {
+        for (let c = rect.left; c <= rect.right; c += 1) {
+          doc.file.setCellShade(tbl, r, c, color);
+        }
+      }
+      touch();
+    },
+    [focus, snapshot, touch],
+  );
+
   const tableCommand = useCallback(
     (action: Parameters<SessionApi['tableCommand']>[0]) => {
       const doc = docRef.current;
@@ -565,6 +651,10 @@ export function useSession(): SessionApi {
     currentParagraphStyle,
     insertTable,
     tableCommand,
+    appendRowToTable,
+    mergeCells,
+    splitCell,
+    setCellShade,
     setShapeText,
     addSlide,
     removeSlide,

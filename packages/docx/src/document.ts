@@ -23,9 +23,14 @@ import {
   cellParagraphs,
   insertColumn,
   insertRow,
+  cellAt,
+  cellGrid,
+  mergeCells,
   readTable,
   removeColumn,
   removeRow,
+  setCellShade,
+  splitCell,
 } from './table.js';
 import { CT, OpcError, OpcPackage, REL } from '@jamo/opc';
 import {
@@ -305,6 +310,29 @@ export class DocxFile {
     return removeColumn(tbl, col);
   }
 
+  static cellAt(tbl: XmlElement, row: number, col: number): XmlElement | undefined {
+    return cellAt(tbl, row, col);
+  }
+
+  static grid(tbl: XmlElement): Array<Array<XmlElement | undefined>> {
+    return cellGrid(tbl);
+  }
+
+  static mergeCells(tbl: XmlElement, r1: number, c1: number, r2: number, c2: number): boolean {
+    return mergeCells(tbl, r1, c1, r2, c2);
+  }
+
+  static splitCell(tbl: XmlElement, row: number, col: number): boolean {
+    return splitCell(tbl, row, col);
+  }
+
+  setCellShade(tbl: XmlElement, row: number, col: number, color: string | undefined): boolean {
+    const tc = cellAt(tbl, row, col);
+    if (!tc) return false;
+    setCellShade(tc, color);
+    return true;
+  }
+
   getText(): string {
     return this.allParagraphs().map(paragraphText).join('\n');
   }
@@ -487,10 +515,20 @@ function tableFromModel(table: JamoTable): XmlElement {
         .join('\n'),
     ),
   );
-  return buildTable({
+  const tbl = buildTable({
     rows: Math.max(table.rows.length, 1),
     cols: colCount,
     width: table.width ? hwpunit.toTwip(table.width) : DEFAULT_TEXT_WIDTH_TWIP,
     text,
   });
+  // 칸 배경색을 옮긴다.
+  const grid = cellGrid(tbl);
+  table.rows.forEach((row, r) => {
+    row.cells.forEach((cell) => {
+      if (!cell.shade) return;
+      const tc = grid[r]?.[cell.colAddr];
+      if (tc) setCellShade(tc, cell.shade);
+    });
+  });
+  return tbl;
 }

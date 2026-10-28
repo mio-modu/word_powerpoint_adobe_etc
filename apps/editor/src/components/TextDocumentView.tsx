@@ -9,9 +9,9 @@ import {
   type ParagraphStyle,
   type XmlElement,
 } from '@jamo/core';
-import type { CSSProperties } from 'react';
+import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
 import { Editable } from './Editable.js';
-import type { Focus } from '../session.js';
+import { selectionRect, type Focus } from '../session.js';
 
 /**
  * 워드프로세서 문서 화면.
@@ -31,6 +31,7 @@ export interface TextDocumentViewProps {
   onParagraphChange: (source: unknown, text: string) => void;
   onParagraphSplit: (source: unknown) => void;
   onParagraphRemove: (source: unknown) => void;
+  onTableAppendRow: (table: unknown) => void;
 }
 
 const FALLBACK_FONTS = `'Noto Sans KR', 'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', sans-serif`;
@@ -83,10 +84,13 @@ interface ParagraphProps {
   focused: boolean;
   placeholder?: string;
   canRemove: boolean;
-  onFocus: () => void;
+  onFocus: (event?: MouseEvent) => void;
   onChange: (text: string) => void;
   onSplit: () => void;
   onRemove: () => void;
+  /** 표 셀 안에서 Tab 으로 칸을 옮길 때. */
+  onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
+  cellAddress?: string;
 }
 
 function Paragraph({
@@ -99,6 +103,8 @@ function Paragraph({
   onChange,
   onSplit,
   onRemove,
+  onKeyDown,
+  cellAddress,
 }: ParagraphProps): JSX.Element {
   const first = para.runs[0];
   const text = para.runs.map((r) => r.text).join('');
@@ -122,10 +128,13 @@ function Paragraph({
         <Editable
           value={text}
           placeholder={placeholder}
-          onFocus={onFocus}
+          onFocus={() => onFocus()}
+          onMouseDown={onFocus}
           onCommit={onChange}
           onSplit={onSplit}
           onRemoveEmpty={canRemove ? onRemove : undefined}
+          onKeyDownCapture={onKeyDown}
+          data-cell={cellAddress}
         />
       )}
     </p>
@@ -138,30 +147,84 @@ interface TableProps {
   focus: Focus;
   onFocus: (focus: Focus) => void;
   onChange: (source: unknown, text: string) => void;
+  /** 마지막 칸에서 Tab 을 누르면 줄을 하나 늘린다. 워드·한글과 같은 동작. */
+  onAppendRow: () => void;
 }
 
-function TableBlock({ table, readOnly, focus, onFocus, onChange }: TableProps): JSX.Element {
-  const totalWidth = table.width ?? 0;
+function TableBlock({
+  table,
+  readOnly,
+  focus,
+  onFocus,
+  onChange,
+  onAppendRow,
+}: TableProps): JSX.Element {
+  const ref = useRef<HTMLTableElement>(null);
+  const pendingFocus = useRef<number | undefined>(undefined);
   const isActive = focus.table !== undefined && focus.table === table.source;
+  const rect = isActive ? selectionRect(focus) : undefined;
+
+  // 줄을 늘린 직후에는 새로 생긴 칸으로 커서를 옮긴다. 다시 그려진 뒤라야
+  // 그 칸이 DOM 에 있으므로 effect 에서 처리한다.
+  useEffect(() => {
+    const index = pendingFocus.current;
+    if (index === undefined) return;
+    pendingFocus.current = undefined;
+    const cells = ref.current?.querySelectorAll<HTMLElement>('[contenteditable]');
+    cells?.[Math.min(index, cells.length - 1)]?.focus();
+  });
+
+  const moveTo = (from: HTMLElement, delta: number): boolean => {
+    const cells = [...(ref.current?.querySelectorAll<HTMLElement>('[contenteditable]') ?? [])];
+    const at = cells.indexOf(from);
+    if (at < 0) return false;
+    const next = cells[at + delta];
+    if (next) {
+      next.focus();
+      return true;
+    }
+    if (delta > 0) {
+      // 마지막 칸에서 Tab → 줄 추가 후 첫 칸으로.
+      pendingFocus.current = cells.length;
+      onAppendRow();
+      return true;
+    }
+    return false;
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key !== 'Tab') return;
+    event.preventDefault();
+    event.stopPropagation();
+    moveTo(event.currentTarget, event.shiftKey ? -1 : 1);
+  };
+
+  const selected = (r: number, c: number): boolean =>
+    rect !== undefined && r >= rect.top && r <= rect.bottom && c >= rect.left && c <= rect.right;
 
   return (
     <table
+      ref={ref}
       className={`doc-table${isActive ? ' doc-table-active' : ''}`}
-      style={totalWidth > 0 ? { width: `${hwpunit.toPx(totalWidth)}px` } : undefined}
+      style={table.width ? { width: `${hwpunit.toPx(table.width)}px` } : undefined}
     >
       <tbody>
         {table.rows.map((row, r) => (
           <tr key={r}>
-            {row.cells.map((cell, c) => {
-              const cellFocused =
-                isActive && focus.row === r && focus.column === c;
+            {row.cells.map((cell, cellIndex) => {
+              // 화면 좌표는 배열 순서가 아니라 셀 주소를 따른다.
+              // 병합이 있으면 둘이 어긋난다.
+              const c = cell.colAddr;
               return (
                 <td
-                  key={c}
-                  className={cellFocused ? 'cell-focused' : undefined}
+                  key={cellIndex}
+                  className={selected(r, c) ? 'cell-selected' : undefined}
                   colSpan={cell.colSpan > 1 ? cell.colSpan : undefined}
                   rowSpan={cell.rowSpan > 1 ? cell.rowSpan : undefined}
-                  style={cell.width ? { width: `${hwpunit.toPx(cell.width)}px` } : undefined}
+                  style={{
+                    ...(cell.width ? { width: `${hwpunit.toPx(cell.width)}px` } : {}),
+                    ...(cell.shade ? { backgroundColor: cell.shade } : {}),
+                  }}
                 >
                   {cell.paragraphs.map((para, i) => (
                     <Paragraph
@@ -170,14 +233,25 @@ function TableBlock({ table, readOnly, focus, onFocus, onChange }: TableProps): 
                       readOnly={readOnly}
                       focused={false}
                       canRemove={false}
-                      onFocus={() =>
+                      cellAddress={`${r},${c}`}
+                      onKeyDown={handleKeyDown}
+                      onFocus={(event) => {
+                        // 클릭하면 mousedown 이 먼저, focus 가 나중에 온다.
+                        // mousedown 이 이미 이 칸을 잡아 뒀으면 focus 는 넘긴다.
+                        // 그러지 않으면 Shift+클릭으로 잡은 범위가 바로 지워진다.
+                        if (!event && isActive && focus.row === r && focus.column === c) return;
                         onFocus({
                           paragraph: para.source as XmlElement,
                           table: table.source as XmlElement,
                           row: r,
                           column: c,
-                        })
-                      }
+                          // Shift+클릭이면 시작점을 남겨 범위를 늘린다.
+                          anchor:
+                            event?.shiftKey && isActive && focus.row !== undefined
+                              ? (focus.anchor ?? { row: focus.row, column: focus.column ?? 0 })
+                              : undefined,
+                        });
+                      }}
                       onChange={(text) => onChange(para.source, text)}
                       onSplit={() => undefined}
                       onRemove={() => undefined}
@@ -202,6 +276,7 @@ export function TextDocumentView({
   onParagraphChange,
   onParagraphSplit,
   onParagraphRemove,
+  onTableAppendRow,
 }: TextDocumentViewProps): JSX.Element {
   return (
     <div className="pages" style={{ ['--zoom' as string]: zoom }}>
@@ -232,6 +307,7 @@ export function TextDocumentView({
                   focus={focus}
                   onFocus={onFocus}
                   onChange={onParagraphChange}
+                  onAppendRow={() => onTableAppendRow(block.source)}
                 />
               ) : (
                 <Paragraph

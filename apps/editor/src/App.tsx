@@ -3,6 +3,7 @@ import { FormatBar } from './components/FormatBar.js';
 import { ShortcutHelp } from './components/ShortcutHelp.js';
 import { SlideDeckView } from './components/SlideDeckView.js';
 import { TextDocumentView } from './components/TextDocumentView.js';
+import { TableToolbar } from './components/TableToolbar.js';
 import { Toolbar } from './components/Toolbar.js';
 import { supportsFileSystemAccess } from './lib/fs.js';
 import { keyOf, matchBinding, type CommandId } from './lib/keymap.js';
@@ -114,6 +115,12 @@ export function App(): JSX.Element {
         case 'deleteTable':
           session.tableCommand(command);
           break;
+        case 'mergeCells':
+          session.mergeCells();
+          break;
+        case 'splitCell':
+          session.splitCell();
+          break;
         case 'addSlide':
           session.addSlide();
           break;
@@ -219,6 +226,8 @@ export function App(): JSX.Element {
         <FormatBar session={session} disabled={session.busy} isDeck={state.kind === 'pptx'} />
       )}
 
+      {state && !state.readOnly && <TableToolbar session={session} />}
+
       {session.error && (
         <div className="banner banner-error">
           <pre>{session.error}</pre>
@@ -264,6 +273,7 @@ export function App(): JSX.Element {
             onParagraphChange={session.setParagraphText}
             onParagraphSplit={(source) => session.addParagraph(source, '')}
             onParagraphRemove={session.removeParagraph}
+            onTableAppendRow={session.appendRowToTable}
           />
         )}
       </main>

@@ -1,4 +1,10 @@
-import { useEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 
 /**
  * contentEditable 한 줄/여러 줄 편집기.
@@ -22,6 +28,11 @@ export interface EditableProps {
   placeholder?: string;
   /** 커서가 들어왔을 때. 서식 명령이 어디에 적용될지 정하는 데 쓴다. */
   onFocus?: () => void;
+  /** Shift+클릭으로 셀 범위를 고를 때 쓴다. focus 만으로는 Shift 를 알 수 없다. */
+  onMouseDown?: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  /** Tab 처리처럼 기본 동작보다 먼저 가로채야 하는 키. */
+  onKeyDownCapture?: (event: KeyboardEvent<HTMLDivElement>) => void;
+  'data-cell'?: string;
 }
 
 export function Editable({
@@ -34,6 +45,9 @@ export function Editable({
   className,
   placeholder,
   onFocus,
+  onMouseDown,
+  onKeyDownCapture,
+  'data-cell': dataCell,
 }: EditableProps): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -80,8 +94,11 @@ export function Editable({
       suppressContentEditableWarning
       spellCheck={false}
       data-placeholder={placeholder}
+      data-cell={dataCell}
       onFocus={onFocus}
+      onMouseDown={onMouseDown}
       onBlur={commit}
+      onKeyDownCapture={onKeyDownCapture}
       onKeyDown={handleKeyDown}
     />
   );

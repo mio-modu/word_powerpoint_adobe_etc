@@ -52,6 +52,9 @@
 | 왼쪽에 칸 추가 | `Ctrl+Alt+←` | |
 | 줄 지우기 | `Ctrl+Alt+Shift+↓` | |
 | 칸 지우기 | `Ctrl+Alt+Shift+→` | |
+| 셀 합치기 | `Ctrl+Alt+M` | 먼저 Shift+클릭으로 범위를 고릅니다 |
+| 셀 나누기 | `Ctrl+Alt+Shift+M` | 합친 셀을 되돌립니다 |
+| 다음 칸 / 앞 칸 | `Tab` / `Shift+Tab` | 마지막 칸에서 Tab 이면 줄이 늘어납니다 |
 
 ## 보기
 

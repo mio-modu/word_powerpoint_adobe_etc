@@ -41,6 +41,11 @@ import {
   removeRow,
   tablesIn,
   wrapTableInParagraph,
+  cellAt,
+  cellGrid,
+  mergeCells,
+  setCellShade,
+  splitCell,
   DEFAULT_TEXT_WIDTH,
 } from './table.js';
 import {
@@ -57,7 +62,14 @@ import {
 import { ENTRY, ENTRY_ORDER, FILE_ID, MIME, sectionEntry, sectionId } from './constants.js';
 import { StyleRegistry, fillSection } from './convert.js';
 import { findOrCreateCharPr, findOrCreateParaPr } from './format.js';
-import { readPageSetup, readStyleTables, charStyleFrom, paragraphStyleFrom, type HwpxStyleTables } from './styles.js';
+import {
+  cellShadeOf,
+  charStyleFrom,
+  paragraphStyleFrom,
+  readPageSetup,
+  readStyleTables,
+  type HwpxStyleTables,
+} from './styles.js';
 
 export class HwpxError extends Error {
   constructor(message: string) {
@@ -166,7 +178,10 @@ export class HwpxFile {
 
     model.sections.forEach((section, index) => {
       const root = file.sectionRoot(index);
-      fillSection({ sectionRoot: root, registry, tableBorderFillIDRef }, section.blocks);
+      fillSection(
+        { sectionRoot: root, registry, tableBorderFillIDRef, headerRoot: file.header },
+        section.blocks,
+      );
       applyPageSetup(root, section.page);
     });
 
@@ -602,6 +617,34 @@ export class HwpxFile {
     return removeColumn(tbl, col);
   }
 
+  /** 격자 좌표의 셀. 병합된 자리는 주인 셀을 돌려준다. */
+  static cellAt(tbl: XmlElement, row: number, col: number): XmlElement | undefined {
+    return cellAt(tbl, row, col);
+  }
+
+  /** 격자 전체. 화면에서 셀 범위를 고를 때 쓴다. */
+  static grid(tbl: XmlElement): Array<Array<XmlElement | undefined>> {
+    return cellGrid(tbl);
+  }
+
+  static mergeCells(tbl: XmlElement, r1: number, c1: number, r2: number, c2: number): boolean {
+    return mergeCells(tbl, r1, c1, r2, c2);
+  }
+
+  static splitCell(tbl: XmlElement, row: number, col: number): boolean {
+    return splitCell(tbl, row, col);
+  }
+
+  /** 셀 배경색. `color` 를 비우면 색을 걷어낸다. */
+  setCellShade(tbl: XmlElement, row: number, col: number, color: string | undefined): boolean {
+    const tc = cellAt(tbl, row, col);
+    if (!tc) return false;
+    const plain = ensureTableBorderFill(this.header);
+    setCellShade(this.header, tc, color, plain);
+    this.styleTables = undefined;
+    return true;
+  }
+
   // -------------------------------------------------------------------- 모델화
 
   getText(): string {
@@ -795,6 +838,8 @@ function blocksOf(sectionRoot: XmlElement, tables: HwpxStyleTables): JamoBlock[]
 
 function tableOf(tbl: XmlElement, tables: HwpxStyleTables): JamoTable {
   const model = readTable(tbl);
+  const cells = childElements(tbl, 'hp:tr').flatMap((tr) => childElements(tr, 'hp:tc'));
+  let at = 0;
   for (const row of model.rows) {
     for (const cell of row.cells) {
       const subList = cell.source as XmlElement | undefined;
@@ -802,6 +847,9 @@ function tableOf(tbl: XmlElement, tables: HwpxStyleTables): JamoTable {
         ? childElements(subList, 'hp:p').map((p) => paragraphOf(p, tables))
         : [];
       if (cell.paragraphs.length === 0) cell.paragraphs = [{ runs: [{ text: '' }] }];
+      const tc = cells[at];
+      at += 1;
+      if (tc) cell.shade = cellShadeOf(tables, attr(tc, 'borderFillIDRef'));
     }
   }
   return model;
