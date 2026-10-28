@@ -260,6 +260,7 @@ export function App(): JSX.Element {
             onShapeFocus={(shape, slideIndex) => session.setFocus({ shape, slideIndex })}
             onAddSlide={session.addSlide}
             onRemoveSlide={session.removeSlide}
+            imageUrl={session.imageUrl}
           />
         )}
 

@@ -57,3 +57,7 @@ const pptx = PptxFile.fromOutline(
   { title: '사업계획서', creator: '자모 오피스' },
 );
 write('sample.pptx', pptx.save());
+
+// 테마·배경·그림·표가 든 덱. 화면에 "보이는 대로" 나오는지 확인하는 데 쓴다.
+const { buildThemedDeck } = await import('../packages/pptx/test/fixtures/themed-deck.js');
+write('themed.pptx', buildThemedDeck());

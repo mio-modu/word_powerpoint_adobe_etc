@@ -168,6 +168,29 @@ export interface JamoTextDocument {
   sections: JamoSection[];
 }
 
+/** 채우기. 그라데이션은 화면에서 선형으로 근사한다. */
+export interface JamoFill {
+  type: 'solid' | 'gradient' | 'none';
+  /** `#RRGGBB`. */
+  color?: string;
+  /** 0–1. 1이면 불투명. */
+  alpha?: number;
+  gradient?: { from: string; to: string; angle: number };
+}
+
+/** 그림. 실제 바이트는 파일 안의 파트에서 꺼낸다. */
+export interface JamoImage {
+  /** 패키지 안의 파트 경로 (`ppt/media/image1.png`). */
+  part: string;
+  alt?: string;
+  /**
+   * 틀에 어떻게 채우는지.
+   * `fill` 은 비율을 무시하고 틀에 맞춰 늘린다 — PPTX 의 기본값이다.
+   * `contain` 은 비율을 지키며 안에 들인다.
+   */
+  fit?: 'fill' | 'contain' | 'cover';
+}
+
 export interface JamoShape {
   id: string;
   name?: string;
@@ -176,11 +199,38 @@ export interface JamoShape {
   /** 자리 표시자 종류 (title, body, ctrTitle …). */
   placeholder?: string;
   paragraphs: JamoParagraph[];
+  /** 도형 배경. */
+  fill?: JamoFill;
+  /** 테두리. */
+  line?: { color?: string; width?: number };
+  /** 그림 도형이면 그 그림. */
+  image?: JamoImage;
+  /**
+   * 도형 모양. PPTX 는 수백 가지를 정의하지만 화면에서 구분이 되는 건 몇 개뿐이라
+   * 사각형·둥근사각형·타원·선으로 줄여서 들고 있는다.
+   */
+  geometry?: 'rect' | 'roundRect' | 'ellipse' | 'line' | 'other';
+  /** 둥근 모서리 반경 (짧은 변 대비 0–0.5). */
+  cornerRadius?: number;
+  /** 표 도형이면 그 표. */
+  table?: JamoTable;
+  /** 시계 방향 회전 각도. */
+  rotation?: number;
+  flipH?: boolean;
+  flipV?: boolean;
+  /** 글상자 안 세로 정렬. */
+  anchor?: 'top' | 'middle' | 'bottom';
+  /** 도형 안 여백 (HWPUNIT). */
+  inset?: { left: number; right: number; top: number; bottom: number };
+  /** 그릴 순서. 작은 값이 아래. */
+  zIndex?: number;
   source?: unknown;
 }
 
 export interface JamoSlide {
   shapes: JamoShape[];
+  /** 슬라이드 배경. 슬라이드 → 레이아웃 → 마스터 순으로 찾는다. */
+  background?: JamoFill;
   /** 슬라이드 노트 본문. */
   notes?: string;
   source?: unknown;

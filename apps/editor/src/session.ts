@@ -121,6 +121,8 @@ export interface SessionApi {
   removeSlide: (index: number) => void;
 
   convertForEditing: () => void;
+  /** 슬라이드 그림의 화면용 주소. 파일 안 바이트를 Blob 으로 만들어 돌려준다. */
+  imageUrl: (part: string) => string | undefined;
 }
 
 /** 되돌리기 스택 한도. 문서 전체를 스냅샷으로 들고 있어 상한이 필요하다. */
@@ -129,6 +131,9 @@ const UNDO_BYTES_LIMIT = 96 * 1024 * 1024;
 
 export function useSession(): SessionApi {
   const docRef = useRef<OpenedDocument | undefined>(undefined);
+  // 같은 그림을 여러 장이 쓰므로 한 번 만든 주소는 재사용한다. 문서를 닫을 때
+  // 되돌려주지 않으면 메모리가 계속 쌓인다.
+  const imageUrls = useRef(new Map<string, string>());
   const handleRef = useRef<FileSystemFileHandle | undefined>(undefined);
   const undoRef = useRef<Uint8Array[]>([]);
   const redoRef = useRef<Uint8Array[]>([]);
@@ -137,6 +142,11 @@ export function useSession(): SessionApi {
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
   const [focus, setFocus] = useState<Focus>({});
+
+  const releaseImages = useCallback(() => {
+    for (const url of imageUrls.current.values()) URL.revokeObjectURL(url);
+    imageUrls.current.clear();
+  }, []);
 
   const refreshUndoFlags = useCallback(() => {
     setState((s) =>
@@ -183,6 +193,7 @@ export function useSession(): SessionApi {
       handle: FileSystemFileHandle | undefined,
       dirty: boolean,
     ) => {
+      releaseImages();
       docRef.current = doc;
       handleRef.current = handle;
       undoRef.current = [];
@@ -200,7 +211,7 @@ export function useSession(): SessionApi {
       setError(undefined);
       setRevision((r) => r + 1);
     },
-    [],
+    [releaseImages],
   );
 
   const openFromData = useCallback(
@@ -242,7 +253,20 @@ export function useSession(): SessionApi {
     [adopt],
   );
 
+  const imageUrl = useCallback((part: string): string | undefined => {
+    const cached = imageUrls.current.get(part);
+    if (cached) return cached;
+    const doc = docRef.current;
+    if (!doc || doc.kind !== 'pptx') return undefined;
+    const bytes = doc.file.partBytes(part);
+    if (!bytes) return undefined;
+    const url = URL.createObjectURL(new Blob([bytes as unknown as BlobPart], { type: mimeOf(part) }));
+    imageUrls.current.set(part, url);
+    return url;
+  }, []);
+
   const close = useCallback(() => {
+    releaseImages();
     docRef.current = undefined;
     handleRef.current = undefined;
     undoRef.current = [];
@@ -659,7 +683,37 @@ export function useSession(): SessionApi {
     addSlide,
     removeSlide,
     convertForEditing,
+    imageUrl,
   };
+}
+
+/** 확장자로 그림 종류를 짐작한다. 틀려도 브라우저가 대개 알아서 읽는다. */
+function mimeOf(part: string): string {
+  const ext = part.slice(part.lastIndexOf('.') + 1).toLowerCase();
+  switch (ext) {
+    case 'png':
+      return 'image/png';
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'gif':
+      return 'image/gif';
+    case 'svg':
+      return 'image/svg+xml';
+    case 'webp':
+      return 'image/webp';
+    case 'bmp':
+      return 'image/bmp';
+    case 'tif':
+    case 'tiff':
+      return 'image/tiff';
+    case 'emf':
+    case 'wmf':
+      // 브라우저가 못 읽는 형식. img 가 비어 보이는 건 어쩔 수 없다.
+      return 'application/octet-stream';
+    default:
+      return 'application/octet-stream';
+  }
 }
 
 /** 어떤 포맷이든 원하는 포맷의 바이트로 내보낸다. */

@@ -2,3 +2,5 @@ export * from './templates.js';
 export * from './presentationml.js';
 export { PptxFile, PptxError } from './document.js';
 export type { BlankPptxOptions } from './document.js';
+export * from './theme.js';
+export * from './slide.js';

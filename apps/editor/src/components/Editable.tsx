@@ -33,6 +33,10 @@ export interface EditableProps {
   /** Tab 처리처럼 기본 동작보다 먼저 가로채야 하는 키. */
   onKeyDownCapture?: (event: KeyboardEvent<HTMLDivElement>) => void;
   'data-cell'?: string;
+  /** 나타나자마자 커서를 넣는다. 눌러서 편집으로 바꿀 때 쓴다. */
+  autoFocus?: boolean;
+  /** 편집을 마쳤을 때. 반영이 끝난 뒤 불린다. */
+  onBlurCapture?: () => void;
 }
 
 export function Editable({
@@ -48,6 +52,8 @@ export function Editable({
   onMouseDown,
   onKeyDownCapture,
   'data-cell': dataCell,
+  autoFocus,
+  onBlurCapture,
 }: EditableProps): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -59,11 +65,26 @@ export function Editable({
     if (el.textContent !== value) el.textContent = value;
   }, [value]);
 
+  useEffect(() => {
+    if (!autoFocus) return;
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    // 커서를 글 끝에 둔다. 맨 앞에 두면 이어 쓰기가 어색하다.
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }, [autoFocus]);
+
   const commit = (): void => {
     const el = ref.current;
     if (!el) return;
     const text = el.textContent ?? '';
     if (text !== value) onCommit(text);
+    onBlurCapture?.();
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {

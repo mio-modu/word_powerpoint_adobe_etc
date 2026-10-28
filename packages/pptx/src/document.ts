@@ -29,6 +29,13 @@ import {
   themeXml,
   viewPropsXml,
 } from './templates.js';
+import { emptyTheme, readTheme, type ThemeColors } from './theme.js';
+import {
+  readBackground,
+  readInheritedDecorations,
+  readShapes,
+  type SlideContext,
+} from './slide.js';
 import {
   buildParagraph,
   buildRunProps,
@@ -73,6 +80,7 @@ export interface BlankPptxOptions {
 export class PptxFile {
   readonly pkg: OpcPackage;
   readonly presentationPart: string;
+  private readonly themeCache = new Map<string, ThemeColors>();
 
   private constructor(pkg: OpcPackage, presentationPart: string) {
     this.pkg = pkg;
@@ -377,16 +385,32 @@ export class PptxFile {
     txBody.selfClosed = false;
   }
 
+  /**
+   * 덱 전체의 평문.
+   *
+   * 도형 트리를 직접 훑지 않고 모델을 쓴다. 표나 그룹 안의 글자가 빠지면
+   * 찾기·미리보기에서 그대로 티가 나는데, 모델은 그걸 이미 다 펴 놓았다.
+   */
   getText(): string {
-    const out: string[] = [];
-    for (let i = 0; i < this.slideCount; i += 1) {
-      const lines: string[] = [];
-      for (const sp of this.shapes(i)) {
-        for (const p of shapeParagraphs(sp)) lines.push(paragraphText(p));
-      }
-      out.push(lines.join('\n'));
-    }
-    return out.join('\n\n');
+    return this.toModel()
+      .slides.map((slide) =>
+        slide.shapes
+          .flatMap((shape) => {
+            const own = shape.paragraphs.map((p) => p.runs.map((r) => r.text).join(''));
+            if (!shape.table) return own;
+            const rows = shape.table.rows.map((row) =>
+              row.cells
+                .map((cell) =>
+                  cell.paragraphs.map((p) => p.runs.map((r) => r.text).join('')).join(' '),
+                )
+                .join('\t'),
+            );
+            return [...own, ...rows];
+          })
+          .filter((line) => line !== '')
+          .join('\n'),
+      )
+      .join('\n\n');
   }
 
   // ------------------------------------------------------------------ 메타
@@ -433,44 +457,115 @@ export class PptxFile {
 
   // --------------------------------------------------------------- 모델화
 
+  // ------------------------------------------------------- 레이아웃·마스터
+
+  /** 슬라이드가 쓰는 레이아웃 파트. */
+  layoutPartOf(slideIndex: number): string | undefined {
+    const part = this.slidePaths()[slideIndex];
+    return part ? this.pkg.relatedPart(part, REL.slideLayout) : undefined;
+  }
+
+  /** 레이아웃이 쓰는 마스터 파트. */
+  masterPartOf(layoutPart: string | undefined): string | undefined {
+    return layoutPart ? this.pkg.relatedPart(layoutPart, REL.slideMaster) : undefined;
+  }
+
+  /**
+   * 테마를 읽는다. 마스터마다 테마가 다를 수 있어 마스터 기준으로 찾는다.
+   * 한 번 읽은 것은 기억해 둔다 — 48장짜리 문서에서 장마다 다시 읽으면 느리다.
+   */
+  themeFor(masterPart: string | undefined): ThemeColors {
+    const key = masterPart ?? '';
+    const cached = this.themeCache.get(key);
+    if (cached) return cached;
+
+    const themePart = masterPart ? this.pkg.relatedPart(masterPart, REL.theme) : undefined;
+    const themeRoot = themePart ? this.pkg.xml(themePart)?.root : undefined;
+    const masterRoot = masterPart ? this.pkg.xml(masterPart)?.root : undefined;
+    const theme = themeRoot ? readTheme(themeRoot, masterRoot) : emptyTheme();
+    this.themeCache.set(key, theme);
+    return theme;
+  }
+
+  /** 한 슬라이드를 읽는 데 필요한 맥락을 모은다. */
+  contextFor(slideIndex: number): SlideContext {
+    const slidePart = this.slidePaths()[slideIndex];
+    const layoutPart = this.layoutPartOf(slideIndex);
+    const masterPart = this.masterPartOf(layoutPart);
+    return {
+      theme: this.themeFor(masterPart),
+      resolveRel: (id) =>
+        slidePart ? this.pkg.resolveRelationshipId(slidePart, id) : undefined,
+      layoutRoot: layoutPart ? this.pkg.xml(layoutPart)?.root : undefined,
+      masterRoot: masterPart ? this.pkg.xml(masterPart)?.root : undefined,
+    };
+  }
+
+  /** 그림 같은 파트의 실제 바이트. 화면에 띄울 때 쓴다. */
+  partBytes(part: string): Uint8Array | undefined {
+    return this.pkg.bytes(part);
+  }
+
+  // -------------------------------------------------------------- 모델화
+
   toModel(): JamoPresentation {
     const size = this.slideSize;
     const slides: JamoSlide[] = [];
+
     for (let i = 0; i < this.slideCount; i += 1) {
-      const shapes: JamoShape[] = this.shapes(i).map((sp, shapeIndex) => {
-        const frame = readFrame(sp);
-        return {
-          id: String(shapeIndex),
-          name: readShapeName(sp),
-          placeholder: readPlaceholder(sp),
-          frame: frame
-            ? {
-                x: hwpunit.fromEmu(frame.x),
-                y: hwpunit.fromEmu(frame.y),
-                width: hwpunit.fromEmu(frame.width),
-                height: hwpunit.fromEmu(frame.height),
-              }
-            : undefined,
-          paragraphs: shapeParagraphs(sp).map((p) => ({
-            runs: paragraphRuns(p).map((run) => ({
-              text: runText(run),
-              style: readRunStyle(run),
-              source: run,
-            })),
-            style: readParagraphStyle(p),
-            source: p,
-          })),
-          source: sp,
-        };
+      const ctx = this.contextFor(i);
+      const slideRoot = this.slideRoot(i);
+      const layoutPart = this.layoutPartOf(i);
+      const masterPart = this.masterPartOf(layoutPart);
+
+      // 레이아웃·마스터의 장식 도형을 먼저 깔고 그 위에 슬라이드를 얹는다.
+      // 배경 띠나 로고가 여기 있어서, 빼면 허전한 장표가 된다.
+      const masterCtx: SlideContext = {
+        ...ctx,
+        resolveRel: (id) =>
+          masterPart ? this.pkg.resolveRelationshipId(masterPart, id) : undefined,
+      };
+      const layoutCtx: SlideContext = {
+        ...ctx,
+        resolveRel: (id) =>
+          layoutPart ? this.pkg.resolveRelationshipId(layoutPart, id) : undefined,
+      };
+
+      const decorations = [
+        ...(this.showsMasterShapes(ctx.layoutRoot)
+          ? readInheritedDecorations(ctx.masterRoot, masterCtx)
+          : []),
+        ...(this.showsMasterShapes(slideRoot)
+          ? readInheritedDecorations(ctx.layoutRoot, layoutCtx)
+          : []),
+      ];
+
+      const own = readShapes(this.shapeTree(i), ctx);
+      const shapes = [...decorations, ...own].map((shape, index) => ({
+        ...shape,
+        id: String(index),
+        zIndex: index,
+      }));
+
+      slides.push({
+        shapes,
+        background: readBackground([slideRoot, ctx.layoutRoot, ctx.masterRoot], ctx.theme),
+        source: slideRoot,
       });
-      slides.push({ shapes, source: this.slideRoot(i) });
     }
+
     return {
       kind: 'slides',
       meta: this.meta,
       slideSize: { width: hwpunit.fromEmu(size.width), height: hwpunit.fromEmu(size.height) },
       slides,
     };
+  }
+
+  /** `showMasterSp="0"` 이면 물려받은 장식을 그리지 않는다는 뜻이다. */
+  private showsMasterShapes(root: XmlElement | undefined): boolean {
+    if (!root) return true;
+    return attr(root, 'showMasterSp') !== '0';
   }
 
   /** 개요(제목 + 불릿)에서 덱을 만든다. */

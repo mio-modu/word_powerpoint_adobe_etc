@@ -320,8 +320,11 @@ button.ghost {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 200px;
+  width: 212px;
   flex-shrink: 0;
+  max-height: calc(100vh - 170px);
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .thumb {
@@ -330,8 +333,22 @@ button.ghost {
   align-items: flex-start;
   text-align: left;
   background: var(--panel);
-  padding: 10px;
-  min-height: 56px;
+  padding: 8px;
+  min-height: 44px;
+}
+
+/* 미리보기는 본 화면과 같은 경로로 그린다. 클릭만 받고 안쪽은 건드리지 않는다. */
+.thumb-canvas {
+  display: block;
+  pointer-events: none;
+  flex: 1;
+  min-width: 0;
+}
+
+.thumb-canvas .slide {
+  box-shadow: none;
+  border: 1px solid var(--line);
+  border-radius: 2px;
 }
 
 .thumb-active {
@@ -343,13 +360,6 @@ button.ghost {
   color: var(--ink-muted);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
-}
-
-.thumb-text {
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
 }
 
 .thumb-add {
@@ -366,13 +376,12 @@ button.ghost {
 
 .slide {
   position: relative;
-  background: #ffffff;
   color: #111111;
   box-shadow: var(--shadow);
   overflow: hidden;
 }
 
-.shape {
+.slide-shape {
   overflow: hidden;
 }
 
@@ -383,9 +392,37 @@ button.ghost {
   word-break: break-word;
 }
 
-.shape:hover {
-  outline: 1px dashed #c3c8d1;
-  outline-offset: 2px;
+/* 글자가 있는 도형만 편집 대상이라는 표시를 준다. 배경 도형까지 테두리가
+   생기면 화면이 지저분해진다. */
+.slide-shape-text:hover {
+  outline: 1px dashed rgba(31, 111, 235, 0.6);
+  outline-offset: 1px;
+}
+
+.slide-shape p {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.slide-image-missing {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: #8b93a1;
+  background: repeating-linear-gradient(45deg, #f3f4f6, #f3f4f6 6px, #e9ebef 6px, #e9ebef 12px);
+}
+
+.slide-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.slide-table td {
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  padding: 2px 4px;
+  vertical-align: middle;
 }
 
 .deck-actions {
@@ -801,4 +838,28 @@ kbd {
 
 .doc-table td {
   position: relative;
+}
+
+/* 슬라이드 글상자의 "고치기" 단추. 평소엔 숨어 있다가 올리면 나온다. */
+.shape-edit-hint {
+  /* 글을 복사할 때 단추 글자가 딸려 가지 않게 한다. */
+  user-select: none;
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+
+.slide-shape-text:hover .shape-edit-hint {
+  opacity: 0.95;
+  pointer-events: auto;
 }

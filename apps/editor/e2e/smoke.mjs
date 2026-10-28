@@ -97,15 +97,40 @@ await page.screenshot({ path: `${outDir}/02-docx.png` });
 console.log('\n[PPTX 열기]');
 await page.reload({ waitUntil: 'load' });
 await dropFile('sample.pptx');
-await page.waitForSelector('.slide', { timeout: 5000 });
+await page.waitForSelector('.deck-stage .slide', { timeout: 5000 });
 const thumbs = await page.locator('.deck-rail .thumb:not(.thumb-add)').count();
 check('슬라이드 썸네일이 3개다', thumbs === 3, `실제 ${thumbs}개`);
-const slideText = (await page.textContent('.slide')) ?? '';
+const slideText = (await page.textContent('.deck-stage .slide')) ?? '';
 check('첫 장 제목이 보인다', slideText.includes('2026 사업계획'), slideText.slice(0, 60));
 await page.locator('.deck-rail .thumb').nth(1).click();
 await page.waitForTimeout(300);
-check('둘째 장으로 넘어간다', ((await page.textContent('.slide')) ?? '').includes('시장 분석'));
+check('둘째 장으로 넘어간다', ((await page.textContent('.deck-stage .slide')) ?? '').includes('시장 분석'));
 await page.screenshot({ path: `${outDir}/03-pptx.png` });
+
+console.log('\n[슬라이드를 보이는 대로 그린다]');
+await page.reload({ waitUntil: 'load' });
+await dropFile('themed.pptx');
+await page.waitForSelector('.deck-stage .slide', { timeout: 8000 });
+await page.waitForTimeout(500);
+const bg = await page.evaluate(() =>
+  getComputedStyle(document.querySelector('.deck-stage .slide')).backgroundColor);
+check('마스터의 어두운 배경이 적용된다', bg === 'rgb(26, 34, 54)', bg);
+
+const titleStyle = await page.evaluate(() => {
+  const spans = [...document.querySelectorAll('.deck-stage .slide-shape span')];
+  const el = spans.find((s) => s.textContent?.includes('영광을'));
+  if (!el) return null;
+  const cs = getComputedStyle(el);
+  return { color: cs.color, weight: cs.fontWeight, size: cs.fontSize };
+});
+check('제목 색을 테마에서 물려받는다', titleStyle?.color === 'rgb(201, 162, 39)', JSON.stringify(titleStyle));
+check('제목 굵기를 마스터에서 물려받는다', titleStyle?.weight === '700');
+check('그림이 그려진다', (await page.locator('.deck-stage .slide img').count()) >= 1);
+check('슬라이드 안 표가 그려진다', (await page.locator('.deck-stage .slide-table').count()) === 1);
+check('미리보기도 같은 모습으로 그려진다',
+  (await page.evaluate(() =>
+    getComputedStyle(document.querySelector('.thumb-canvas .slide')).backgroundColor)) === 'rgb(26, 34, 54)');
+await page.screenshot({ path: `${outDir}/06-themed.png` });
 
 console.log('\n[새 문서 만들기]');
 await page.reload({ waitUntil: 'load' });
