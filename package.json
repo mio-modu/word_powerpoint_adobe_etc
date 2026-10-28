@@ -1,0 +1,28 @@
+{
+  "name": "jamo-office",
+  "version": "0.1.0",
+  "private": true,
+  "description": "브라우저에서 바로 여는 무료 오피스 — 한글(hwp/hwpx) 우선, 이후 Word/PowerPoint",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --build --force",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "npm run dev --workspace @jamo/editor",
+    "build:web": "npm run build --workspace @jamo/editor"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
