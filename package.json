@@ -22,7 +22,9 @@
     "samples": "vite-node scripts/emit-samples.mts -- samples && vite-node scripts/emit-old-hwp.mts -- samples",
     "inspect": "vite-node scripts/inspect-cfb.mts --",
     "test:e2e": "node apps/editor/e2e/smoke.mjs",
-    "preview": "vite preview --outDir apps/editor/dist --port 4173"
+    "preview": "vite preview --outDir apps/editor/dist --port 4173",
+    "build:single": "npm run build:web && vite-node scripts/bundle-single-file.mts -- apps/editor/dist",
+    "test:e2e:file": "node apps/editor/e2e/single-file.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

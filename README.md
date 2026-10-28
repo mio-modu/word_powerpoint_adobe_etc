@@ -6,12 +6,16 @@
 
 ```bash
 npm install
-npm run dev        # 개발 서버
-npm run build:web  # 정적 파일로 빌드 → apps/editor/dist
+npm run dev           # 개발 서버
+npm run build:single  # HTML 파일 하나로 빌드 → apps/editor/dist/jamo-office.html
 ```
 
-빌드 결과는 263KB(gzip 87KB)짜리 정적 파일 한 묶음입니다. 아무 데나 올려도 되고,
-USB에 담아 오프라인으로 열어도 동작합니다.
+`build:single` 이 만드는 **`jamo-office.html` 파일 하나를 더블클릭하면 그대로 열립니다.**
+웹서버도, 설치도, 인터넷도 필요 없습니다. 349KB짜리 파일 하나가 전부입니다.
+USB에 담아 다른 컴퓨터에서 열어도 똑같이 동작합니다.
+
+여러 파일로 나뉜 보통의 정적 빌드가 필요하면 `npm run build:web` 을 쓰세요
+(263KB, gzip 87KB).
 
 ---
 
@@ -112,7 +116,8 @@ HWPX·DOCX·PPTX가 전부 "ZIP 안의 XML"이라 `core`와 `opc`를 세 포맷�
 npm test           # 단위 테스트 101개
 npm run typecheck  # 전체 타입 검사
 npm run samples    # 각 형식 샘플 파일 생성
-npm run test:e2e   # 브라우저 종단 테스트 (빌드 + 서버 필요)
+npm run test:e2e        # 브라우저 종단 테스트 (빌드 + 서버 필요)
+npm run test:e2e:file   # 단일 HTML 파일이 file:// 에서 도는지 확인
 ```
 
 단위 테스트만으로는 "내가 쓴 걸 내가 읽는다"까지밖에 보장되지 않습니다. 그래서
@@ -125,6 +130,10 @@ npm run test:e2e   # 브라우저 종단 테스트 (빌드 + 서버 필요)
 - CFB(OLE2) 리더는 LibreOffice가 만든 실제 Word 97 / PowerPoint 97 파일로
   교차 검증했습니다 (442KB 스트림 포함, 모든 스트림 크기 정확히 일치).
 - 브라우저 종단 테스트: 파일 열기 → 편집 → 저장 → 재열기까지 실제 Chromium에서 확인.
+- 단일 HTML 파일이 `file://` 에서 실제로 뜨고 문서가 열리는지도 매번 확인합니다.
+  인라인 스크립트는 번들 내용에 따라 조용히 깨집니다 — 실제로 한 번 깨졌습니다.
+  XML 파서가 문자열로 들고 있던 `"<!--"` 를 HTML 파서가 주석 시작으로 읽어
+  스크립트 뒷부분을 통째로 먹었습니다. 지금은 base64로 감싸 내용과 무관하게 합니다.
 
 ### 아직 확인하지 못한 것
 
