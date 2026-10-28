@@ -112,13 +112,16 @@ export function parseXml(source: string): XmlDocument {
   let declaration: XmlDeclaration | undefined;
   sc.skipSpace();
   if (sc.startsWith('<?xml') && !NAME_CHAR.test(sc.peek(5))) {
+    const declStart = sc.pos;
     sc.pos += 5;
     const attrs = readAttributes(sc);
+    sc.skipSpace();
     sc.expect('?>');
     declaration = {
       version: findAttr(attrs, 'version') ?? '1.0',
       encoding: findAttr(attrs, 'encoding'),
       standalone: findAttr(attrs, 'standalone'),
+      raw: src.slice(declStart, sc.pos),
     };
   }
 
