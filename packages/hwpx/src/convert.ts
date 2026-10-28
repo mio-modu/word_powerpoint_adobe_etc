@@ -6,11 +6,15 @@ import {
   firstChild,
   setAttr,
   setTextContent,
+  isTable,
   type CharStyle,
-  type JamoTextDocument,
+  type JamoBlock,
+  type JamoParagraph,
+  type JamoTable,
   type ParagraphStyle,
   type XmlElement,
 } from '@jamo/core';
+import { DEFAULT_TEXT_WIDTH, buildTable, wrapTableInParagraph } from './table.js';
 
 /**
  * 중립 모델 → HWPX.
@@ -244,18 +248,17 @@ function normalizePara(style: ParagraphStyle | undefined): Record<string, unknow
 export interface SectionBuildTarget {
   sectionRoot: XmlElement;
   registry: StyleRegistry;
+  /** 표에 쓸 테두리 ID. 없으면 표를 테두리 없이 만든다. */
+  tableBorderFillIDRef?: string;
 }
 
 /**
- * 섹션 본문을 모델의 문단으로 채운다.
+ * 섹션 본문을 모델의 블록(문단·표)으로 채운다.
  *
  * 첫 문단의 첫 런에는 `hp:secPr`(용지 설정)이 들어 있어 그대로 지워서는
  * 안 된다. 첫 문단은 재활용하고 내용만 교체한다.
  */
-export function fillSection(
-  target: SectionBuildTarget,
-  paragraphs: JamoTextDocument['sections'][number]['paragraphs'],
-): void {
+export function fillSection(target: SectionBuildTarget, blocks: JamoBlock[]): void {
   const { sectionRoot, registry } = target;
   const existing = childElements(sectionRoot, 'hp:p');
   const first = existing[0];
@@ -271,14 +274,41 @@ export function fillSection(
   const ctrl = firstRun && firstChild(firstRun, 'hp:ctrl');
   const lineSegArray = firstChild(first, 'hp:linesegarray');
 
-  const model = paragraphs.length > 0 ? paragraphs : [{ runs: [{ text: '' }] }];
+  const list: JamoBlock[] = blocks.length > 0 ? blocks : [{ runs: [{ text: '' }] }];
+  let firstUsed = false;
+  let nextId = 1;
 
-  model.forEach((para, index) => {
-    const paraPrId = registry.paraPrId(para.style);
+  const buildParagraph = (para: JamoParagraph, id: number): XmlElement => {
     const runs = para.runs.length > 0 ? para.runs : [{ text: '' }];
+    const p = element(
+      'hp:p',
+      {
+        id: String(id),
+        paraPrIDRef: registry.paraPrId(para.style),
+        styleIDRef: '0',
+        pageBreak: 0,
+        columnBreak: 0,
+        merged: 0,
+      },
+      runs.map((r) =>
+        element('hp:run', { charPrIDRef: registry.charPrId(r.style) }, [textElement(r.text)]),
+      ),
+    );
+    if (lineSegArray) p.children.push(structuredClone(lineSegArray));
+    return p;
+  };
 
-    if (index === 0) {
-      setAttr(first, 'paraPrIDRef', paraPrId);
+  for (const block of list) {
+    if (isTable(block)) {
+      sectionRoot.children.push(tableParagraph(block, target, nextId));
+      nextId += 1;
+      continue;
+    }
+
+    const runs = block.runs.length > 0 ? block.runs : [{ text: '' }];
+    if (!firstUsed) {
+      firstUsed = true;
+      setAttr(first, 'paraPrIDRef', registry.paraPrId(block.style));
       setAttr(first, 'id', '0');
       // secPr/ctrl 을 품은 런은 유지하고, 그 안의 텍스트만 바꾼다.
       const keep: XmlElement[] = [];
@@ -296,26 +326,55 @@ export function fillSection(
       first.children = [head, ...rest];
       if (lineSegArray) first.children.push(lineSegArray);
       first.selfClosed = false;
-      return;
+      continue;
     }
 
-    const p = element(
-      'hp:p',
-      {
-        id: String(index),
-        paraPrIDRef: paraPrId,
-        styleIDRef: '0',
-        pageBreak: 0,
-        columnBreak: 0,
-        merged: 0,
-      },
-      runs.map((r) =>
-        element('hp:run', { charPrIDRef: registry.charPrId(r.style) }, [textElement(r.text)]),
-      ),
-    );
-    if (lineSegArray) p.children.push(structuredClone(lineSegArray));
-    sectionRoot.children.push(p);
+    sectionRoot.children.push(buildParagraph(block, nextId));
+    nextId += 1;
+  }
+
+  // 블록이 표로만 이뤄져 있으면 첫 문단이 쓰이지 않는다. 비워 둔다.
+  if (!firstUsed) {
+    const head = element('hp:run', { charPrIDRef: '0' }, [
+      ...(secPr ? [secPr] : []),
+      ...(ctrl ? [ctrl] : []),
+      textElement(''),
+    ]);
+    first.children = lineSegArray ? [head, lineSegArray] : [head];
+    first.selfClosed = false;
+    // 첫 문단이 섹션 맨 앞에 오도록 되돌린다.
+    const i = sectionRoot.children.indexOf(first);
+    if (i > 0) {
+      sectionRoot.children.splice(i, 1);
+      sectionRoot.children.unshift(first);
+    }
+  }
+}
+
+/** 모델의 표를 `hp:tbl` 을 담은 문단으로 바꾼다. */
+function tableParagraph(table: JamoTable, target: SectionBuildTarget, id: number): XmlElement {
+  const rowCount = table.rows.length;
+  const colCount = Math.max(1, ...table.rows.map((r) => r.cells.length));
+  const text = table.rows.map((row) =>
+    Array.from({ length: colCount }, (_unused, c) => {
+      const cell = row.cells[c];
+      if (!cell) return '';
+      return cell.paragraphs
+        .map((para) => para.runs.map((run) => run.text).join(''))
+        .join('\n');
+    }),
+  );
+
+  const tbl = buildTable({
+    rows: Math.max(rowCount, 1),
+    cols: colCount,
+    width: table.width && table.width > 0 ? table.width : DEFAULT_TEXT_WIDTH,
+    borderFillIDRef: target.tableBorderFillIDRef ?? '1',
+    paraPrIDRef: '0',
+    charPrIDRef: '0',
+    text,
   });
+  return wrapTableInParagraph(tbl, '0', '0', id);
 }
 
 function textElement(text: string): XmlElement {

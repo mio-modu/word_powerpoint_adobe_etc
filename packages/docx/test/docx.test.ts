@@ -62,7 +62,7 @@ describe('문단 편집', () => {
     const [p] = file.paragraphs();
     file.setParagraphStyle(p!, 'Heading1');
     const model = reopen(file).toModel();
-    expect(model.sections[0]!.paragraphs[0]!.style?.styleName).toBe('Heading1');
+    expect(model.sections[0]!.blocks[0]!.style?.styleName).toBe('Heading1');
   });
 
   it('앞뒤 공백은 xml:space="preserve" 로 지켜진다', () => {
@@ -98,7 +98,7 @@ describe('서식 읽기', () => {
         { kind: 'element', name: 'w:sz', attrs: [{ name: 'w:val', value: '24' }], children: [], selfClosed: true },
       ],
     });
-    const style = reopen(file).toModel().sections[0]!.paragraphs[0]!.runs[0]!.style!;
+    const style = reopen(file).toModel().sections[0]!.blocks[0]!.runs[0]!.style!;
     expect(style.bold).toBe(false);
     expect(style.italic).toBe(true);
     expect(style.fontSize).toBe(12);
@@ -152,8 +152,76 @@ describe('HWPX → DOCX 변환', () => {
   it('글꼴·크기가 함께 넘어간다', () => {
     const hwpx = HwpxFile.blank({ text: '서식 있는 글' });
     const docx = DocxFile.fromModel(hwpx.toModel());
-    const style = reopen(docx).toModel().sections[0]!.paragraphs[0]!.runs[0]!.style!;
+    const style = reopen(docx).toModel().sections[0]!.blocks[0]!.runs[0]!.style!;
     expect(style.fontFamily).toBe('함초롬바탕');
     expect(style.fontSize).toBe(10);
+  });
+});
+
+describe('DOCX 표', () => {
+  it('표를 넣고 다시 읽는다', () => {
+    const file = DocxFile.blank({ text: '아래 표' });
+    file.insertTable(2, 3, { text: [['이름', '점수', '등급'], ['홍길동', '95', 'A']] });
+    const again = reopen(file);
+    expect(again.tables()).toHaveLength(1);
+    const text = again.getText();
+    expect(text).toContain('홍길동');
+    expect(text).toContain('등급');
+  });
+
+  it('셀에 문단이 반드시 하나 있다 (Word 요구사항)', () => {
+    const file = DocxFile.blank();
+    const tbl = file.insertTable(2, 2);
+    for (const tr of childElements(tbl, 'w:tr')) {
+      for (const tc of childElements(tr, 'w:tc')) {
+        expect(childElements(tc, 'w:p').length).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
+
+  it('tblGrid 의 칸 수가 실제 칸 수와 맞는다', () => {
+    const file = DocxFile.blank();
+    const tbl = file.insertTable(2, 4);
+    const grid = firstChild(tbl, 'w:tblGrid')!;
+    expect(childElements(grid, 'w:gridCol')).toHaveLength(4);
+    expect(childElements(childElements(tbl, 'w:tr')[0]!, 'w:tc')).toHaveLength(4);
+  });
+
+  it('표 뒤에 문단이 따라온다', () => {
+    const file = DocxFile.blank({ text: 'x' });
+    const tbl = file.insertTable(1, 1);
+    const kids = childElements(file.body);
+    const i = kids.indexOf(tbl);
+    expect(kids[i + 1]!.name).toBe('w:p');
+  });
+
+  it('w:sectPr 는 여전히 마지막이다', () => {
+    const file = DocxFile.blank({ text: 'x' });
+    file.insertTable(2, 2);
+    const kids = childElements(file.body);
+    expect(kids[kids.length - 1]!.name).toBe('w:sectPr');
+  });
+
+  it('줄과 칸을 넣고 뺀다', () => {
+    const file = DocxFile.blank();
+    const tbl = file.insertTable(2, 2, { text: [['A', 'B'], ['C', 'D']] });
+    DocxFile.insertRow(tbl, 0);
+    expect(childElements(tbl, 'w:tr')).toHaveLength(3);
+    DocxFile.insertColumn(tbl, 0);
+    expect(childElements(firstChild(tbl, 'w:tblGrid')!, 'w:gridCol')).toHaveLength(3);
+    expect(childElements(childElements(tbl, 'w:tr')[0]!, 'w:tc')).toHaveLength(3);
+    DocxFile.removeRow(tbl, 1);
+    expect(childElements(tbl, 'w:tr')).toHaveLength(2);
+    DocxFile.removeColumn(tbl, 2);
+    expect(childElements(firstChild(tbl, 'w:tblGrid')!, 'w:gridCol')).toHaveLength(2);
+    expect(reopen(file).getText()).toContain('A');
+  });
+
+  it('셀 글자를 바꾼다', () => {
+    const file = DocxFile.blank();
+    const tbl = file.insertTable(2, 2, { text: [['A', 'B'], ['C', 'D']] });
+    const cells = DocxFile.cells(tbl);
+    file.setParagraphText(cells[0]![1]!, '바뀜');
+    expect(reopen(file).getText()).toContain('바뀜');
   });
 });

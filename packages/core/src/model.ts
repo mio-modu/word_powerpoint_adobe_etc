@@ -69,9 +69,72 @@ export interface JamoRun {
 }
 
 export interface JamoParagraph {
+  /** 블록 종류. 문단은 생략 가능하다 (기본값). */
+  type?: 'paragraph';
   runs: JamoRun[];
   style?: ParagraphStyle;
   source?: unknown;
+}
+
+export interface JamoTableCell {
+  /** 셀 안의 문단들. 셀은 그 자체로 작은 문서다. */
+  paragraphs: JamoParagraph[];
+  /** 가로로 합쳐진 칸 수. 기본 1. */
+  colSpan: number;
+  rowSpan: number;
+  /** 0부터 세는 칸/줄 위치. 병합이 있으면 순서와 일치하지 않는다. */
+  colAddr: number;
+  rowAddr: number;
+  /** HWPUNIT. */
+  width?: number;
+  height?: number;
+  source?: unknown;
+}
+
+export interface JamoTableRow {
+  cells: JamoTableCell[];
+  source?: unknown;
+}
+
+export interface JamoTable {
+  type: 'table';
+  rows: JamoTableRow[];
+  /** 칸 너비 (HWPUNIT). 알 수 없으면 비어 있다. */
+  columnWidths?: number[];
+  /** 표 전체 너비 (HWPUNIT). */
+  width?: number;
+  source?: unknown;
+}
+
+/**
+ * 본문을 이루는 덩어리. 문단 아니면 표다.
+ *
+ * 표를 문단 목록에 억지로 끼워 넣지 않고 별도 블록으로 둔 이유: 표는 안에
+ * 또 문단을 품는 재귀 구조라, 평평한 문단 목록으로는 표현할 수 없다.
+ */
+export type JamoBlock = JamoParagraph | JamoTable;
+
+export function isTable(block: JamoBlock): block is JamoTable {
+  return (block as JamoTable).type === 'table';
+}
+
+export function isParagraph(block: JamoBlock): block is JamoParagraph {
+  return (block as JamoTable).type !== 'table';
+}
+
+/** 표 안쪽까지 포함해 모든 문단을 문서 순서로 모은다. */
+export function allParagraphs(blocks: JamoBlock[]): JamoParagraph[] {
+  const out: JamoParagraph[] = [];
+  for (const block of blocks) {
+    if (isTable(block)) {
+      for (const row of block.rows) {
+        for (const cell of row.cells) out.push(...cell.paragraphs);
+      }
+    } else {
+      out.push(block);
+    }
+  }
+  return out;
 }
 
 export interface PageSetup {
@@ -92,7 +155,8 @@ export interface PageSetup {
 
 export interface JamoSection {
   page: PageSetup;
-  paragraphs: JamoParagraph[];
+  /** 문단과 표가 문서에 나오는 순서대로. */
+  blocks: JamoBlock[];
 }
 
 /** 워드프로세서 문서 (HWP/HWPX/DOCX). */
@@ -151,9 +215,7 @@ export function emptyPageSetup(): PageSetup {
 /** 문서 전체의 평문. 검색·미리보기·테스트에 쓴다. */
 export function plainText(content: JamoContent): string {
   if (content.kind === 'text') {
-    return content.sections
-      .flatMap((s) => s.paragraphs.map(paragraphText))
-      .join('\n');
+    return content.sections.flatMap((s) => blockText(s.blocks)).join('\n');
   }
   return content.slides
     .map((slide) => slide.shapes.flatMap((sh) => sh.paragraphs.map(paragraphText)).join('\n'))
@@ -162,4 +224,23 @@ export function plainText(content: JamoContent): string {
 
 export function paragraphText(p: JamoParagraph): string {
   return p.runs.map((r) => r.text).join('');
+}
+
+/** 블록 목록의 평문. 표는 셀을 탭으로, 줄을 줄바꿈으로 잇는다. */
+export function blockText(blocks: JamoBlock[]): string[] {
+  const out: string[] = [];
+  for (const block of blocks) {
+    if (isTable(block)) {
+      for (const row of block.rows) {
+        out.push(row.cells.map((c) => c.paragraphs.map(paragraphText).join(' ')).join('\t'));
+      }
+    } else {
+      out.push(paragraphText(block));
+    }
+  }
+  return out;
+}
+
+export function emptyCell(colAddr: number, rowAddr: number): JamoTableCell {
+  return { paragraphs: [{ runs: [{ text: '' }] }], colSpan: 1, rowSpan: 1, colAddr, rowAddr };
 }

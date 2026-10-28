@@ -153,13 +153,13 @@ describe('HWP 5.0 문서 읽기', () => {
     expect(file.faceNames.map((f) => f.name)).toEqual(['함초롬바탕', '맑은 고딕']);
 
     const model = file.toModel();
-    const first = model.sections[0]!.paragraphs[0]!.runs[0]!.style!;
+    const first = model.sections[0]!.blocks[0]!.runs[0]!.style!;
     expect(first.bold).toBe(true);
     expect(first.italic).toBe(false);
     expect(first.fontSize).toBe(11);
     expect(first.fontFamily).toBe('함초롬바탕');
 
-    const second = model.sections[0]!.paragraphs[1]!.runs[0]!.style!;
+    const second = model.sections[0]!.blocks[1]!.runs[0]!.style!;
     expect(second.italic).toBe(true);
     expect(second.bold).toBe(false);
     expect(second.fontSize).toBe(9);
@@ -177,7 +177,7 @@ describe('HWP 5.0 문서 읽기', () => {
         paragraphs: [{ text: '보통인데 굵게', charShapeRuns: [[0, 0], [5, 1]] }],
       }),
     );
-    const runs = file.toModel().sections[0]!.paragraphs[0]!.runs;
+    const runs = file.toModel().sections[0]!.blocks[0]!.runs;
     expect(runs.map((r) => r.text)).toEqual(['보통인데 ', '굵게']);
     expect(runs[0]!.style?.bold).toBe(false);
     expect(runs[1]!.style?.bold).toBe(true);
@@ -193,7 +193,7 @@ describe('HWP 5.0 문서 읽기', () => {
         ],
       }),
     );
-    const paras = file.toModel().sections[0]!.paragraphs;
+    const paras = file.toModel().sections[0]!.blocks;
     expect(paras[0]!.style?.align).toBe('center');
     expect(paras[1]!.style?.align).toBe('left');
   });

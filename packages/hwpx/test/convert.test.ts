@@ -32,7 +32,7 @@ describe('HWP 5.0 → HWPX', () => {
       }),
     );
     const hwpx = reopenHwpx(HwpxFile.fromModel(hwp.toModel()));
-    const style = hwpx.toModel().sections[0]!.paragraphs[0]!.runs[0]!.style!;
+    const style = hwpx.toModel().sections[0]!.blocks[0]!.runs[0]!.style!;
     expect(style.bold).toBe(true);
     expect(style.fontSize).toBe(14);
     expect(style.fontFamily).toBe('맑은 고딕');
@@ -49,7 +49,7 @@ describe('HWP 5.0 → HWPX', () => {
         ],
       }),
     );
-    const paras = reopenHwpx(HwpxFile.fromModel(hwp.toModel())).toModel().sections[0]!.paragraphs;
+    const paras = reopenHwpx(HwpxFile.fromModel(hwp.toModel())).toModel().sections[0]!.blocks;
     expect(paras[0]!.style?.align).toBe('center');
     expect(paras[1]!.style?.align).toBe('right');
   });
@@ -103,7 +103,7 @@ describe('HWP 5.0 → DOCX', () => {
     );
     const docx = reopenDocx(DocxFile.fromModel(hwp.toModel()));
     expect(docx.getText()).toBe('보고서 제목\n본문');
-    const style = docx.toModel().sections[0]!.paragraphs[0]!.runs[0]!.style!;
+    const style = docx.toModel().sections[0]!.blocks[0]!.runs[0]!.style!;
     expect(style.bold).toBe(true);
     expect(style.italic).toBe(true);
     expect(style.fontSize).toBe(11);
@@ -138,7 +138,7 @@ describe('HWPX 왕복', () => {
     original.appendParagraph(0, '둘째 문단');
     const roundTripped = reopenHwpx(HwpxFile.fromModel(original.toModel()));
     expect(roundTripped.getText()).toBe('원본 문단\n둘째 문단');
-    const style = roundTripped.toModel().sections[0]!.paragraphs[0]!.runs[0]!.style!;
+    const style = roundTripped.toModel().sections[0]!.blocks[0]!.runs[0]!.style!;
     expect(style.fontSize).toBe(10);
     expect(style.fontFamily).toBe('함초롬바탕');
   });

@@ -5,13 +5,28 @@ import {
   emptyPageSetup,
   firstChild,
   hwpunit,
+  isTable,
   textContent,
+  type CharStyle,
   type DocMeta,
+  type JamoBlock,
   type JamoParagraph,
+  type JamoTable,
   type JamoTextDocument,
   type PageSetup,
+  type ParagraphStyle,
   type XmlElement,
 } from '@jamo/core';
+import {
+  DEFAULT_TEXT_WIDTH_TWIP,
+  buildTable,
+  cellParagraphs,
+  insertColumn,
+  insertRow,
+  readTable,
+  removeColumn,
+  removeRow,
+} from './table.js';
 import { CT, OpcError, OpcPackage, REL } from '@jamo/opc';
 import {
   A4_TWIP,
@@ -31,8 +46,11 @@ import {
   paragraphText,
   readCharStyle,
   readParagraphStyle,
+  setParagraphFormat,
+  setParagraphRunStyle,
   setParagraphStyleName,
   setParagraphText,
+  setRunStyle,
   setRunText,
 } from './wordml.js';
 
@@ -188,6 +206,105 @@ export class DocxFile {
     return true;
   }
 
+  // ------------------------------------------------------------------- 서식
+
+  setRunStyle(run: XmlElement, patch: Partial<CharStyle>): void {
+    setRunStyle(run, patch);
+  }
+
+  setParagraphRunStyle(p: XmlElement, patch: Partial<CharStyle>): void {
+    setParagraphRunStyle(p, patch);
+  }
+
+  setParagraphFormat(p: XmlElement, patch: Partial<ParagraphStyle>): void {
+    setParagraphFormat(p, patch);
+  }
+
+  runStyleOf(p: XmlElement): CharStyle | undefined {
+    const run = paragraphRuns(p)[0];
+    return run ? readCharStyle(run) : undefined;
+  }
+
+  paragraphStyleOf(p: XmlElement): ParagraphStyle | undefined {
+    return readParagraphStyle(p);
+  }
+
+  // --------------------------------------------------------------------- 표
+
+  /** 본문의 표들 (문서 순서, 중첩 포함). */
+  tables(): XmlElement[] {
+    const out: XmlElement[] = [];
+    const walk = (el: XmlElement): void => {
+      for (const child of el.children) {
+        if (child.kind !== 'element') continue;
+        if (child.name === 'w:tbl') out.push(child);
+        walk(child);
+      }
+    };
+    walk(this.body);
+    return out;
+  }
+
+  /** 표를 넣는다. `after` 뒤, 없으면 본문 끝(sectPr 앞). */
+  insertTable(
+    rows: number,
+    cols: number,
+    options: { after?: XmlElement; text?: string[][]; width?: number } = {},
+  ): XmlElement {
+    if (rows < 1 || cols < 1) throw new DocxError('표는 최소 1줄 1칸이어야 합니다');
+    const body = this.body;
+    const tbl = buildTable({
+      rows,
+      cols,
+      width: options.width ?? DEFAULT_TEXT_WIDTH_TWIP,
+      text: options.text,
+    });
+    // 표 바로 뒤에는 문단이 있어야 커서를 둘 수 있고 Word 도 그걸 기대한다.
+    const trailing = buildParagraph([{ text: '' }]);
+
+    const insertAt = options.after
+      ? body.children.indexOf(options.after) + 1
+      : (() => {
+          const sectPr = firstChild(body, 'w:sectPr');
+          return sectPr ? body.children.indexOf(sectPr) : body.children.length;
+        })();
+    body.children.splice(Math.max(insertAt, 0), 0, tbl, trailing);
+    body.selfClosed = false;
+    return tbl;
+  }
+
+  removeTable(tbl: XmlElement): boolean {
+    const body = this.body;
+    const i = body.children.indexOf(tbl);
+    if (i < 0) return false;
+    body.children.splice(i, 1);
+    return true;
+  }
+
+  static cells(tbl: XmlElement): XmlElement[][] {
+    return childElements(tbl, 'w:tr').map((tr) =>
+      childElements(tr, 'w:tc')
+        .map((tc) => cellParagraphs(tc)[0])
+        .filter((p): p is XmlElement => p !== undefined),
+    );
+  }
+
+  static insertRow(tbl: XmlElement, afterRow: number): boolean {
+    return insertRow(tbl, afterRow);
+  }
+
+  static removeRow(tbl: XmlElement, row: number): boolean {
+    return removeRow(tbl, row);
+  }
+
+  static insertColumn(tbl: XmlElement, afterCol: number): boolean {
+    return insertColumn(tbl, afterCol);
+  }
+
+  static removeColumn(tbl: XmlElement, col: number): boolean {
+    return removeColumn(tbl, col);
+  }
+
   getText(): string {
     return this.allParagraphs().map(paragraphText).join('\n');
   }
@@ -271,23 +388,21 @@ export class DocxFile {
   }
 
   toModel(): JamoTextDocument {
-    const paragraphs: JamoParagraph[] = this.allParagraphs().map((p) => {
-      const runs = paragraphRuns(p).map((run) => ({
-        text: paragraphText(run),
-        style: readCharStyle(run),
-        source: run,
-      }));
-      return {
-        runs: runs.length > 0 ? runs : [{ text: '', source: undefined }],
-        style: readParagraphStyle(p),
-        source: p,
-      };
-    });
     return {
       kind: 'text',
       meta: this.meta,
-      sections: [{ page: this.pageSetup, paragraphs }],
+      sections: [{ page: this.pageSetup, blocks: this.blocks() }],
     };
+  }
+
+  /** 본문을 문단·표 블록 목록으로. 표 안의 문단은 표 블록 안에 들어간다. */
+  blocks(): JamoBlock[] {
+    const out: JamoBlock[] = [];
+    for (const child of childElements(this.body)) {
+      if (child.name === 'w:p') out.push(paragraphModel(child));
+      else if (child.name === 'w:tbl') out.push(tableModel(child));
+    }
+    return out;
   }
 
   /** 중립 모델에서 DOCX 를 새로 만든다 (HWPX → DOCX 변환 경로). */
@@ -309,19 +424,73 @@ export class DocxFile {
       else body.children.push(replacement);
     }
 
+    const appendBeforeSectPr = (node: XmlElement): void => {
+      const marker = firstChild(body, 'w:sectPr');
+      if (marker) body.children.splice(body.children.indexOf(marker), 0, node);
+      else body.children.push(node);
+    };
+
     for (const section of model.sections) {
-      for (const para of section.paragraphs) {
-        const p = buildParagraph(
-          para.runs.map((r) => ({ text: r.text, style: r.style })),
-          para.style,
+      for (const block of section.blocks) {
+        if (isTable(block)) {
+          appendBeforeSectPr(tableFromModel(block));
+          // Word 는 표와 표 사이, 표와 문서 끝 사이에 문단을 요구한다.
+          // 없으면 표가 붙어버리거나 파일이 복구 대상이 된다.
+          appendBeforeSectPr(buildParagraph([{ text: '' }]));
+          continue;
+        }
+        appendBeforeSectPr(
+          buildParagraph(
+            block.runs.map((r) => ({ text: r.text, style: r.style })),
+            block.style,
+          ),
         );
-        const marker = firstChild(body, 'w:sectPr');
-        if (marker) body.children.splice(body.children.indexOf(marker), 0, p);
-        else body.children.push(p);
       }
     }
     body.selfClosed = false;
     if (model.meta.creator) file.setMeta({ creator: model.meta.creator });
     return file;
   }
+}
+
+function paragraphModel(p: XmlElement): JamoParagraph {
+  const runs = paragraphRuns(p).map((run) => ({
+    text: paragraphText(run),
+    style: readCharStyle(run),
+    source: run,
+  }));
+  return {
+    runs: runs.length > 0 ? runs : [{ text: '', source: undefined }],
+    style: readParagraphStyle(p),
+    source: p,
+  };
+}
+
+function tableModel(tbl: XmlElement): JamoTable {
+  const model = readTable(tbl);
+  for (const row of model.rows) {
+    for (const cell of row.cells) {
+      const tc = cell.source as XmlElement | undefined;
+      cell.paragraphs = tc ? cellParagraphs(tc).map(paragraphModel) : [];
+      if (cell.paragraphs.length === 0) cell.paragraphs = [{ runs: [{ text: '' }] }];
+    }
+  }
+  return model;
+}
+
+function tableFromModel(table: JamoTable): XmlElement {
+  const colCount = Math.max(1, ...table.rows.map((r) => r.cells.length));
+  const text = table.rows.map((row) =>
+    Array.from({ length: colCount }, (_unused, c) =>
+      (row.cells[c]?.paragraphs ?? [])
+        .map((para) => para.runs.map((run) => run.text).join(''))
+        .join('\n'),
+    ),
+  );
+  return buildTable({
+    rows: Math.max(table.rows.length, 1),
+    cols: colCount,
+    width: table.width ? hwpunit.toTwip(table.width) : DEFAULT_TEXT_WIDTH_TWIP,
+    text,
+  });
 }

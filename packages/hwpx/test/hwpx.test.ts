@@ -158,7 +158,7 @@ describe('모델 변환', () => {
   it('서식이 모델에 반영된다', () => {
     const file = HwpxFile.blank({ text: '본문' });
     const model = file.toModel();
-    const para = model.sections[0]!.paragraphs[0]!;
+    const para = model.sections[0]!.blocks[0]!;
     expect(para.runs[0]!.text).toBe('본문');
     expect(para.runs[0]!.style?.fontSize).toBe(10);
     expect(para.runs[0]!.style?.fontFamily).toBe('함초롬바탕');

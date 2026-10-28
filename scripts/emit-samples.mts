@@ -35,6 +35,19 @@ write('sample.hwpx', hwpx.save());
 
 write('converted-from-hwpx.docx', DocxFile.fromModel(hwpx.toModel()).save());
 
+// 표가 든 문서 — 다른 오피스 프로그램이 표로 읽는지 확인하기 위한 것
+const withTable = HwpxFile.blank({ text: '2026년 1분기 실적' });
+withTable.insertTable(0, 3, 3, {
+  text: [
+    ['항목', '목표', '실적'],
+    ['매출', '30억', '32억'],
+    ['신규 고객', '120', '145'],
+  ],
+});
+withTable.appendParagraph(0, '표 아래 문단입니다.');
+write('table.hwpx', withTable.save());
+write('table.docx', DocxFile.fromModel(withTable.toModel()).save());
+
 const pptx = PptxFile.fromOutline(
   [
     { title: '2026 사업계획', bullets: ['매출 목표 30억', '신규 채널 3개', '팀 규모 12명'] },

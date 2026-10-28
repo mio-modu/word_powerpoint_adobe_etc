@@ -394,3 +394,134 @@ export function setParagraphStyleName(p: XmlElement, styleId: string): void {
 export function bodyParagraphs(body: XmlElement): XmlElement[] {
   return childElements(body, 'w:p');
 }
+
+
+// ------------------------------------------------------------------ 서식 바꾸기
+
+/**
+ * 런의 글자 서식을 바꾼다.
+ *
+ * DOCX 는 서식을 런 안에 직접 쓰므로 HWPX 처럼 표를 거칠 필요가 없다.
+ * 다만 `w:rPr` 자식의 순서가 스키마로 정해져 있어, 아무 데나 끼워 넣으면
+ * Word 가 거부한다. 그래서 바꿀 때마다 정해진 순서로 다시 쌓는다.
+ */
+const RPR_ORDER = [
+  'w:rStyle',
+  'w:rFonts',
+  'w:b',
+  'w:bCs',
+  'w:i',
+  'w:iCs',
+  'w:caps',
+  'w:smallCaps',
+  'w:strike',
+  'w:dstrike',
+  'w:outline',
+  'w:shadow',
+  'w:color',
+  'w:spacing',
+  'w:w',
+  'w:kern',
+  'w:position',
+  'w:sz',
+  'w:szCs',
+  'w:highlight',
+  'w:u',
+  'w:effect',
+  'w:bdr',
+  'w:shd',
+  'w:vertAlign',
+  'w:rtl',
+  'w:lang',
+];
+
+/**
+ * on/off 속성을 "명시적으로 끈다"고 적는다.
+ *
+ * 그냥 요소를 빼면 문단 스타일에서 물려받은 값이 되살아난다. 제목 스타일이
+ * 굵은데 굵게를 해제하면 다시 굵어지는 식이다. `w:val="0"` 으로 적어야
+ * 상속을 끊을 수 있다.
+ */
+const TOGGLE_ELEMENTS: Partial<Record<keyof CharStyle, string[]>> = {
+  bold: ['w:b', 'w:bCs'],
+  italic: ['w:i', 'w:iCs'],
+  strikeout: ['w:strike'],
+};
+
+export function setRunStyle(run: XmlElement, patch: Partial<CharStyle>): void {
+  const merged: CharStyle = { ...(readCharStyle(run) ?? {}), ...patch };
+  const rPr = firstChild(run, 'w:rPr');
+
+  // 우리가 다루지 않는 속성은 남긴다 (언어 설정, 테두리 등).
+  const managed = new Set([
+    'w:rFonts', 'w:b', 'w:bCs', 'w:i', 'w:iCs', 'w:strike',
+    'w:u', 'w:color', 'w:highlight', 'w:sz', 'w:szCs', 'w:vertAlign',
+  ]);
+  const kept = rPr ? childElements(rPr).filter((el) => !managed.has(el.name)) : [];
+
+  const built = buildRunProps(merged);
+  const fresh = built ? childElements(built) : [];
+
+  // 끄기를 명시한 항목은 빈 요소 대신 w:val="0" 으로 적는다.
+  for (const [key, names] of Object.entries(TOGGLE_ELEMENTS)) {
+    if (merged[key as keyof CharStyle] !== false) continue;
+    for (const name of names ?? []) fresh.push(element(name, { 'w:val': '0' }));
+  }
+  if (merged.underline === false) fresh.push(element('w:u', { 'w:val': 'none' }));
+
+  const all = [...kept, ...fresh].sort((a, b) => {
+    const ia = RPR_ORDER.indexOf(a.name);
+    const ib = RPR_ORDER.indexOf(b.name);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+  });
+
+  if (all.length === 0) {
+    if (rPr) run.children.splice(run.children.indexOf(rPr), 1);
+    return;
+  }
+  if (rPr) {
+    rPr.children = all;
+    rPr.selfClosed = false;
+  } else {
+    run.children.unshift(element('w:rPr', {}, all));
+    run.selfClosed = false;
+  }
+}
+
+/** 문단의 모든 런에 같은 글자 서식을 적용한다. */
+export function setParagraphRunStyle(p: XmlElement, patch: Partial<CharStyle>): void {
+  for (const run of paragraphRuns(p)) setRunStyle(run, patch);
+}
+
+/** 문단 서식(정렬·들여쓰기·줄간격)을 바꾼다. */
+export function setParagraphFormat(p: XmlElement, patch: Partial<ParagraphStyle>): void {
+  const merged: ParagraphStyle = { ...(readParagraphStyle(p) ?? {}), ...patch };
+  const existing = firstChild(p, 'w:pPr');
+  // pStyle 과 numPr 은 buildParagraphProps 가 merged 에서 다시 만들어 준다.
+  const built = buildParagraphProps(merged);
+  const kept = existing
+    ? childElements(existing).filter(
+        (el) => !['w:pStyle', 'w:numPr', 'w:spacing', 'w:ind', 'w:jc', 'w:outlineLvl'].includes(el.name),
+      )
+    : [];
+  const fresh = built ? childElements(built) : [];
+  // w:pPr 안에서도 순서가 정해져 있다. pStyle 이 맨 앞, jc 는 ind 뒤.
+  const order = ['w:pStyle', 'w:keepNext', 'w:keepLines', 'w:numPr', 'w:spacing', 'w:ind', 'w:jc', 'w:outlineLvl'];
+  const all = [...kept, ...fresh].sort((a, b) => {
+    const ia = order.indexOf(a.name);
+    const ib = order.indexOf(b.name);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+  });
+
+  if (all.length === 0) {
+    if (existing) p.children.splice(p.children.indexOf(existing), 1);
+    return;
+  }
+  if (existing) {
+    existing.children = all;
+    existing.selfClosed = false;
+  } else {
+    p.children.unshift(element('w:pPr', {}, all));
+    p.selfClosed = false;
+  }
+}

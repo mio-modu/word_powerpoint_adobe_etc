@@ -376,10 +376,12 @@ export class Hwp5File {
     const sections: JamoSection[] = [];
 
     for (let i = 0; i < this.sectionCount; i += 1) {
-      const paragraphs: JamoParagraph[] = this.paragraphs(i).map((p) =>
+      // HWP 5.0 의 표는 본문 레코드가 아니라 컨트롤 레코드 안에 들어 있어
+      // 아직 해석하지 않는다. 지금은 문단만 블록으로 내보낸다.
+      const blocks = this.paragraphs(i).map((p) =>
         toModelParagraph(p, charShapes, paraShapes, faceNames),
       );
-      sections.push({ page: this.pageSetup(i), paragraphs });
+      sections.push({ page: this.pageSetup(i), blocks });
     }
     return { kind: 'text', meta: this.meta, sections };
   }
