@@ -7,6 +7,9 @@ build/
 dist/
 .pytest_cache/
 out/
+*.jpg
+*.png
+!docs/img/*
 *.hwpx
 *.docx
 !tests/fixtures/*.hwpx

@@ -1,73 +1,60 @@
-# gongmun
+# 소재공장 (sojae)
 
-공공 제출문서 자동 생성 엔진.
+상품 사진 한 장에서 **플랫폼 규격별 한글 광고 소재**를 대량으로 만든다.
 
-> **⚠️ 제품 방향 재설정 (2026-10-28)**
-> 이 저장소가 겨냥했던 "AI 공문서 작성" 시장은 수요 검증에서 탈락했다
-> (`docs/03-demand-validation.md`). 코드는 폐기하지 않는다 - 중간표현(IR)과
-> 두 writer 는 다음 제품의 **출력 단계**로 그대로 재사용한다.
+## 왜 필요한가
 
-입찰공고를 넣으면 요건 체크리스트와 제출문서 초안을 **개방형 문서 포맷**으로
-출력한다. 범용 AI 는 텍스트만 내놓지만, 한국에서 실제로 제출되는 것은
-`.hwpx` / `.docx` 파일이다. 이 저장소는 그 변환 구간을 담당한다.
+이미지 생성 모델은 **한글 글자를 정확히 그리지 못한다.** 그래서 광고 소재를
+생성 모델에만 맡기면 글자가 깨져 쓸 수 없다. 이 엔진은 역할을 나눈다.
+
+> **배경은 생성 모델에, 한글은 코드에.**
+
+여기에 수량(셀러 한 명의 상품 수십~수백 개), 규격(플랫폼별 비율과 세이프존),
+표시광고법 가드가 붙는다. 셋 다 채팅창에서는 처리할 수 없는 일이다.
+
+## 측정된 원가
+
+| 항목 | 값 |
+|---|---|
+| 상품 분석 + 문구 6종 | 약 2.8원 |
+| 소재 18장 출력 | 추가 비용 0 (로컬 합성) |
+| **소재 1장당** | **약 0.16원** |
+
+합성이 전부 로컬이라 규격과 레이아웃을 늘려도 API 비용이 늘지 않는다.
 
 ## 설치
 
 ```bash
-pip install -e ".[llm,dev]"
+pip install -e .
+apt-get install fonts-noto-cjk     # 한글 폰트 (SIL OFL, 상업적 이용 가능)
+export GEMINI_API_KEY=...          # 인증을 주입하는 환경에서는 생략 가능
 ```
 
 ## 사용
 
-API 키 없이 두 포맷 출력물을 확인:
-
 ```bash
-gongmun demo --out out/sample
-# out/sample.hwpx, out/sample.docx
+sojae doctor                      # 폰트·연결 점검
+sojae specs                       # 규격·레이아웃 목록
+sojae make 사진.jpg "보온 텀블러 500ml" \
+    --out out --count 8 \
+    --specs square portrait story \
+    --price "19,900원" --benefit "2개 구매 시 1개 추가"
 ```
 
-공고문에서 요건 체크리스트 생성:
-
-```bash
-export ANTHROPIC_API_KEY=...
-gongmun checklist 공고문.txt --out out/checklist --format both
-```
-
-요금제 설계용 건당 원가·마진 계산:
-
-```bash
-gongmun cost --price 199000 --volume 20
-```
-
-나라장터 연동에는 공공데이터포털에서 '나라장터 입찰공고정보서비스'
-활용신청 후 받은 키가 필요하다:
-
-```bash
-export G2B_SERVICE_KEY=...
-```
+결과는 `out/` 에 쌓이고, `out/manifest.json` 에 상품 분석·문구·파일 목록·원가가
+남는다.
 
 ## 구조
 
-AI 는 중간표현(IR) 하나만 만들고, writer 가 포맷을 책임진다.
-
-```
-공고문 ──> 요건 추출(Haiku) ──> IR ──┬──> HWPX writer
-                                      └──> DOCX writer
-```
-
-## 포맷 정책
-
-- **HWPX** — KS X 6101(OWPML) 국가표준. 공개 규격만 보고 생성한다.
-- **DOCX** — ECMA-376 / ISO 29500 공개 표준.
-
-바이너리 `.hwp 5.0` 역공학, 상용 소프트웨어 중계, 타사 상표 사용은 하지 않는다.
-상세는 `docs/02-unit-economics.md` 의 경계 표를 따른다.
-
-## ⚠️ HWPX 출력 상태
-
-자동 테스트는 **패키지 구조와 내용 왕복까지만** 보장한다. 실제 워드프로세서에서
-열리는지는 아직 사람이 확인하지 않았다. 확인 항목은
-`docs/01-architecture.md` 에 있고, 그때까지 **DOCX 가 기본 출력**이다.
+| 경로 | 책임 |
+|---|---|
+| `typo.py` | **핵심.** 한글 조판 — 어절 줄바꿈, 금칙 처리, 크기 맞춤, 대비 판정 |
+| `render.py` | 레이아웃 4종 합성, 세이프존, 글자 면적 경고 |
+| `spec.py` | 플랫폼 규격표 |
+| `creative.py` | 문구 생성 + 표시광고법 가드 |
+| `palette.py` | 상품 사진에서 강조색 추출 |
+| `gemini.py` | 모델 라우팅 · 재시도 · 원가 집계 |
+| `pipeline.py` | 사진 1장 → 소재 묶음 |
 
 ## 테스트
 
@@ -79,7 +66,24 @@ python -m pytest tests -q
 
 | 파일 | 내용 |
 |---|---|
-| `docs/03-demand-validation.md` | **현재 유효한 결정.** 후보 8개 수요 검증, 탈락 사유, 선택 근거 |
-| `docs/00-strategy.md` | 아이템 선별 기준과 90일 순서 (1순위 판단은 철회됨) |
-| `docs/01-architecture.md` | 모듈 구조, HWPX 패키지 구성, 검증 범위와 미확인 항목 |
-| `docs/02-unit-economics.md` | 건당 원가·마진, 원가 절감 수단, 합법/위반 경계 |
+| `docs/04-ad-engine.md` | **이 제품.** 설계 근거, 타이포 규칙, 원가, 판매 전 확인사항 |
+| `docs/03-demand-validation.md` | 후보 8개 수요 검증과 탈락 사유 |
+| `docs/00-strategy.md` | 아이템 선별 기준과 90일 순서 |
+| `docs/02-unit-economics.md` | 원가 절감 수단, 합법/위반 경계 |
+
+## 같은 저장소의 문서 엔진 (`gongmun`)
+
+공공 제출문서 자동화는 수요 검증에서 탈락했으나(`docs/03-demand-validation.md`),
+중간표현(IR)과 HWPX·DOCX writer 는 남겨 두었다. 소재 묶음의 납품 보고서처럼
+문서 출력이 필요할 때 재사용한다.
+
+```bash
+gongmun demo --out out/sample
+```
+
+## ⚠️ 판매 전 확인
+
+- 폰트 라이선스가 상업적 이용을 허용하는지 (기본값 Noto Sans CJK 는 가능)
+- 상품 사진의 권리를 고객이 보유하는지
+- EU 판매 소재는 AI 생성 표기 의무 (AI Act 제50조)
+- `gemini.PRICING` 은 원가 감각용 기본값 — 공급자 페이지에서 재확인
