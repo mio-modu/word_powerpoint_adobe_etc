@@ -1,4 +1,4 @@
-import { element, setTextContent, twip, type XmlDocument, type XmlElement } from '@jamo/core';
+import { element, setTextContent, type XmlDocument, type XmlElement } from '@jamo/core';
 import { xmlDocumentOf } from '@jamo/opc';
 import { W_NS } from './wordml.js';
 
@@ -38,7 +38,15 @@ const DEFAULT_MARGIN = {
   gutter: 0,
 } as const;
 
-export function sectionProperties(paper = A4_TWIP, landscape = false): XmlElement {
+export interface PaperTwip {
+  width: number;
+  height: number;
+}
+
+export function sectionProperties(
+  paper: PaperTwip = A4_TWIP,
+  landscape = false,
+): XmlElement {
   const width = landscape ? paper.height : paper.width;
   const height = landscape ? paper.width : paper.height;
   return element('w:sectPr', {}, [

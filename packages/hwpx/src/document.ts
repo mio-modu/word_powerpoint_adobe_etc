@@ -37,6 +37,7 @@ import {
   type BlankOptions,
 } from './blank.js';
 import { ENTRY, ENTRY_ORDER, FILE_ID, MIME, sectionEntry, sectionId } from './constants.js';
+import { StyleRegistry, fillSection } from './convert.js';
 import { readPageSetup, readStyleTables, charStyleFrom, paragraphStyleFrom, type HwpxStyleTables } from './styles.js';
 
 export class HwpxError extends Error {
@@ -104,6 +105,43 @@ export class HwpxFile {
     file.parsed.set(ENTRY.settings, blankSettingsXml());
     file.parsed.set(ENTRY.header, blankHeaderXml());
     file.parsed.set(sectionEntry(0), blankSectionXml(opts));
+    return file;
+  }
+
+
+  /**
+   * 중립 모델에서 HWPX 를 새로 만든다 (HWP 5.0 / DOCX → HWPX 변환 경로).
+   *
+   * 모델에 나오는 서로 다른 서식을 header.xml 표로 모은 뒤 본문이 그 번호를
+   * 가리키게 한다. 같은 서식은 표를 재사용하므로 문단이 많아도 표가 커지지 않는다.
+   */
+  static fromModel(model: JamoTextDocument, opts: BlankOptions = {}): HwpxFile {
+    const firstSection = model.sections[0];
+    const paper = firstSection
+      ? { width: firstSection.page.width, height: firstSection.page.height }
+      : undefined;
+    const file = HwpxFile.blank({ ...opts, paper });
+    for (let i = 1; i < model.sections.length; i += 1) file.addSection({ paper });
+
+    const refList = firstChild(file.header, 'hh:refList');
+    if (!refList) throw new HwpxError('header.xml 에 hh:refList 가 없습니다');
+    const fontfaces = firstChild(refList, 'hh:fontfaces');
+    const charProperties = firstChild(refList, 'hh:charProperties');
+    const paraProperties = firstChild(refList, 'hh:paraProperties');
+    if (!fontfaces || !charProperties || !paraProperties) {
+      throw new HwpxError('header.xml 의 참조 표가 불완전합니다');
+    }
+    const registry = new StyleRegistry(fontfaces, charProperties, paraProperties);
+
+    model.sections.forEach((section, index) => {
+      const root = file.sectionRoot(index);
+      fillSection({ sectionRoot: root, registry }, section.paragraphs);
+      applyPageSetup(root, section.page);
+    });
+
+    // header.xml 을 고쳤으므로 서식 표 캐시를 버린다.
+    file.styleTables = undefined;
+    if (Object.keys(model.meta).length > 0) file.setMeta(model.meta);
     return file;
   }
 
@@ -528,4 +566,30 @@ function pageSetupOf(sectionRoot: XmlElement): PageSetup {
         }
       : base.margin,
   };
+}
+
+/** 모델의 용지 설정을 섹션의 hp:secPr 에 반영한다. */
+function applyPageSetup(sectionRoot: XmlElement, page: PageSetup): void {
+  const secPr = readPageSetup(sectionRoot);
+  if (!secPr) return;
+  const pagePr = firstChild(secPr, 'hp:pagePr');
+  if (!pagePr) return;
+  setAttr(pagePr, 'width', String(Math.round(page.width)));
+  setAttr(pagePr, 'height', String(Math.round(page.height)));
+  // HWPX 의 landscape 는 "용지를 어느 쪽으로 넓게 쓰는지"를 가리킨다.
+  setAttr(pagePr, 'landscape', page.landscape ? 'NARROWLY' : 'WIDELY');
+  const margin = firstChild(pagePr, 'hp:margin');
+  if (!margin) return;
+  const m = page.margin;
+  for (const [name, value] of [
+    ['left', m.left],
+    ['right', m.right],
+    ['top', m.top],
+    ['bottom', m.bottom],
+    ['header', m.header],
+    ['footer', m.footer],
+    ['gutter', m.gutter],
+  ] as const) {
+    setAttr(margin, name, String(Math.round(value)));
+  }
 }
