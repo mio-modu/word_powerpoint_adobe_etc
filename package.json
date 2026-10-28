@@ -18,11 +18,17 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "dev": "npm run dev --workspace @jamo/editor",
-    "build:web": "npm run build --workspace @jamo/editor"
+    "build:web": "npm run build --workspace @jamo/editor",
+    "samples": "vite-node scripts/emit-samples.mts -- samples && vite-node scripts/emit-old-hwp.mts -- samples",
+    "inspect": "vite-node scripts/inspect-cfb.mts --",
+    "test:e2e": "node apps/editor/e2e/smoke.mjs",
+    "preview": "vite preview --outDir apps/editor/dist --port 4173"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "vite": "^6.0.5",
+    "@vitejs/plugin-react": "^4.3.4"
   }
 }

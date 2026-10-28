@@ -166,3 +166,19 @@ describe('모델 변환', () => {
     expect(model.sections[0]!.page.height).toBe(84188);
   });
 });
+
+describe('형식 판별', () => {
+  it('DOCX 를 HWPX 로 열면 거부한다', async () => {
+    const { DocxFile } = await import('@jamo/docx');
+    expect(() => HwpxFile.open(DocxFile.blank().save())).toThrow(/HWPX 파일이 아닙니다/);
+  });
+
+  it('PPTX 를 HWPX 로 열면 거부한다', async () => {
+    const { PptxFile } = await import('@jamo/pptx');
+    expect(() => HwpxFile.open(PptxFile.blank().save())).toThrow(/OOXML/);
+  });
+
+  it('ZIP 이 아니면 거부한다', () => {
+    expect(() => HwpxFile.open(new Uint8Array([1, 2, 3, 4]))).toThrow(/HWPX 파일이 아닙니다/);
+  });
+});

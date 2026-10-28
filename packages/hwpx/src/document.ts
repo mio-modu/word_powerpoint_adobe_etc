@@ -87,6 +87,15 @@ export class HwpxFile {
     if (mimetype !== undefined && mimetype !== MIME.hwpx) {
       throw new HwpxError(`예상과 다른 mimetype 입니다: ${mimetype}`);
     }
+    // DOCX/PPTX 도 ZIP 이고 mimetype 항목이 없다. 표식이 하나도 없으면
+    // HWPX 로 받아들이지 않는다. 받아들여 놓고 나중에 터지면, 호출하는
+    // 쪽에서는 "열렸는데 깨진 파일" 로 보여 원인을 찾기 어렵다.
+    if (mimetype === undefined && !entries.has(ENTRY.contentHpf)) {
+      const hint = entries.has('[Content_Types].xml')
+        ? ' OOXML(.docx/.pptx) 로 보입니다.'
+        : '';
+      throw new HwpxError(`HWPX 파일이 아닙니다 (mimetype 과 ${ENTRY.contentHpf} 둘 다 없음).${hint}`);
+    }
     const file = new HwpxFile(entries);
     // content.hpf 는 어느 파트가 XML 인지 알려주는 지도다. 먼저 읽어야 한다.
     file.xml(ENTRY.contentHpf);

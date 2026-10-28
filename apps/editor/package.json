@@ -1,0 +1,27 @@
+{
+  "name": "@jamo/editor",
+  "version": "0.1.0",
+  "description": "Jamo Office 웹 에디터 — hwp/hwpx/docx/pptx 를 브라우저에서 열고 고친다",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@jamo/core": "0.1.0",
+    "@jamo/docx": "0.1.0",
+    "@jamo/hwp5": "0.1.0",
+    "@jamo/hwpx": "0.1.0",
+    "@jamo/opc": "0.1.0",
+    "@jamo/pptx": "0.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.5"
+  }
+}
