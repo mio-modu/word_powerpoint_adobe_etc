@@ -1,0 +1,818 @@
+<title>AI 활용 능력자</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;900&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+  /* 레이아웃: 상단 고정 HUD(자산·AIQ·등급) + 화면 전환식 본문. 게임 콘솔 세계관으로 단일 다크 테마. */
+  :root {
+    --void: #0a0c12;
+    --panel: #12151f;
+    --panel-2: #1a1e2b;
+    --line: #262b3b;
+    --text: #e8eaf0;
+    --dim: #8b92a8;
+    --gold: #f5b945;
+    --cyan: #4fd1c5;
+    --red: #f2635a;
+    --green: #5fcf80;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--void); color: var(--text);
+    font-family: "IBM Plex Sans KR", system-ui, sans-serif;
+    font-size: 15px; line-height: 1.65; -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+    z-index: 30; background: var(--panel);
+  }
+  h1, h2, h3, .num, .big {
+    font-family: "Gothic A1", "IBM Plex Sans KR", sans-serif; font-weight: 900;
+    margin: 0; letter-spacing: -.02em; text-wrap: balance;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  p { margin: 0; }
+  button { font: inherit; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  .wrap {
+    max-width: 920px; margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  /* HUD */
+  .hud {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .hud__in { display: flex; align-items: center; gap: 14px; padding-block: 10px; flex-wrap: wrap; }
+  .brand { font-family: "Gothic A1", sans-serif; font-weight: 900; font-size: .95rem;
+           letter-spacing: -.02em; margin-right: auto; }
+  .brand span { color: var(--gold); }
+  .stat { display: flex; flex-direction: column; line-height: 1.15; }
+  .stat__k { font-size: .62rem; letter-spacing: .12em; color: var(--dim); font-weight: 600; }
+  .stat__v { font-size: .98rem; font-weight: 900; font-family: "Gothic A1", sans-serif;
+             font-variant-numeric: tabular-nums; }
+  .v-gold { color: var(--gold); } .v-cyan { color: var(--cyan); }
+
+  .screen { padding-block: 26px 60px; }
+  .hidden { display: none !important; }
+
+  /* 공용 */
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px; }
+  .btn {
+    background: var(--gold); color: #1a1405; border: 0; border-radius: 6px;
+    padding: 13px 22px; font-weight: 700; font-size: .95rem;
+  }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn--ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  .btn--cyan { background: var(--cyan); color: #04211e; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .eyebrow { font-size: .68rem; letter-spacing: .16em; color: var(--dim); font-weight: 700; }
+  .dim { color: var(--dim); }
+  .mt8 { margin-top: 8px; } .mt14 { margin-top: 14px; } .mt22 { margin-top: 22px; }
+  input[type=text], textarea {
+    width: 100%; background: var(--void); color: var(--text); font: inherit;
+    border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; resize: vertical;
+  }
+  textarea { min-height: 180px; line-height: 1.6; }
+  input:focus, textarea:focus { border-color: var(--gold); outline: none; }
+
+  /* 인트로 */
+  .hero h1 { font-size: clamp(1.9rem, 6vw, 3rem); line-height: 1.15; }
+  .hero h1 em { font-style: normal; color: var(--gold); }
+  .pillars { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  .pillar { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--cyan);
+            border-radius: 0 6px 6px 0; padding: 14px 16px; min-width: 0; }
+  .pillar b { display: block; font-family: "Gothic A1", sans-serif; font-weight: 900; }
+  .pillar span { font-size: .85rem; color: var(--dim); }
+
+  /* 미션 목록 */
+  .missions { display: grid; gap: 10px; margin-top: 18px; }
+  .m {
+    display: grid; grid-template-columns: 44px 1fr auto; gap: 14px; align-items: center;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; text-align: left; width: 100%; color: inherit; min-width: 0;
+  }
+  .m:disabled { opacity: .42; cursor: not-allowed; }
+  .m__n { font-family: "Gothic A1", sans-serif; font-weight: 900; font-size: 1.15rem;
+          color: var(--dim); text-align: center; }
+  .m.done .m__n { color: var(--green); }
+  .m.open { border-color: var(--gold); }
+  .m__t { font-family: "Gothic A1", sans-serif; font-weight: 700; font-size: 1rem; min-width: 0; }
+  .m__s { font-size: .8rem; color: var(--dim); }
+  .m__r { text-align: right; font-size: .78rem; color: var(--dim); white-space: nowrap; }
+  .m__r b { display: block; font-family: "Gothic A1", sans-serif; font-size: 1.05rem;
+            color: var(--gold); font-variant-numeric: tabular-nums; }
+  .m.done .m__r b { color: var(--green); }
+
+  /* 미션 플레이 */
+  .brief { border-left: 3px solid var(--gold); padding-left: 16px; }
+  .goal { background: var(--panel-2); border-radius: 6px; padding: 14px 16px; font-size: .9rem; }
+  .goal b { color: var(--cyan); }
+  .counter { font-size: .76rem; color: var(--dim); text-align: right; }
+
+  /* 결과 */
+  .scorebar { display: grid; gap: 9px; margin-top: 14px; }
+  .sb { display: grid; grid-template-columns: 112px 1fr 42px; gap: 10px; align-items: center;
+        font-size: .83rem; }
+  .sb__t { height: 8px; background: var(--panel-2); border-radius: 99px; overflow: hidden; }
+  .sb__f { height: 100%; background: var(--cyan); border-radius: 99px; }
+  .sb__v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .out {
+    background: var(--void); border: 1px solid var(--line); border-radius: 6px;
+    padding: 14px 16px; font-size: .88rem; white-space: pre-wrap; word-break: break-word;
+    max-height: 340px; overflow: auto;
+  }
+  .fixes { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 7px; }
+  .fixes li { font-size: .88rem; padding-left: 20px; position: relative; }
+  .fixes li::before { content: "→"; position: absolute; left: 0; color: var(--gold); }
+  .verdict { font-size: clamp(1.4rem, 5vw, 2rem); }
+
+  /* 자격증 */
+  .cert {
+    background: linear-gradient(160deg, #161a27, #0d1017);
+    border: 2px solid var(--gold); border-radius: 10px; padding: 30px 24px; text-align: center;
+  }
+  .cert__seal { font-family: "Gothic A1", sans-serif; font-weight: 900; font-size: .7rem;
+                letter-spacing: .2em; color: var(--gold); }
+  .cert__name { font-size: clamp(1.5rem, 5vw, 2.2rem); margin: 10px 0 4px; }
+  .cert__id { font-family: ui-monospace, Menlo, monospace; font-size: .76rem; color: var(--dim);
+              word-break: break-all; margin-top: 14px; }
+
+  /* 리더보드 */
+  table { border-collapse: collapse; width: 100%; min-width: 380px; }
+  th, td { padding: 9px 10px; border-bottom: 1px solid var(--line); font-size: .86rem; text-align: left; }
+  th { font-size: .66rem; letter-spacing: .12em; color: var(--dim); font-weight: 700; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .tscroll { overflow-x: auto; }
+  .me { background: rgba(245,185,69,.08); }
+
+  .toast {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 40;
+    background: var(--panel-2); border: 1px solid var(--gold); border-radius: 8px;
+    padding: 11px 18px; font-size: .88rem; max-width: 90vw;
+  }
+  @media (max-width: 520px) {
+    .sb { grid-template-columns: 88px 1fr 38px; }
+    .m { grid-template-columns: 32px 1fr; }
+    .m__r { grid-column: 2; text-align: left; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .sb__f { transition: width .6s cubic-bezier(.2,.8,.3,1); }
+    .btn { transition: opacity .15s; } .btn:hover:not(:disabled) { opacity: .88; }
+  }
+</style>
+
+<header class="hud">
+  <div class="hud__in wrap">
+    <div class="brand">AI 활용 <span>능력자</span></div>
+    <div class="stat"><span class="stat__k">자산</span><span class="stat__v v-gold num" id="hudAssets">0원</span></div>
+    <div class="stat"><span class="stat__k">AI 활용 지수</span><span class="stat__v v-cyan num" id="hudAiq">0</span></div>
+    <div class="stat"><span class="stat__k">등급</span><span class="stat__v" id="hudRank">미등록</span></div>
+  </div>
+</header>
+
+<main>
+  <!-- 인트로 -->
+  <section class="screen wrap" id="scIntro">
+    <div class="hero">
+      <p class="eyebrow">실전형 AI 역량 평가 게임</p>
+      <h1 class="mt8">AI를 부려서<br><em>거부(巨富)</em>가 되는 게임</h1>
+      <p class="mt14 dim" style="max-width:56ch">
+        의뢰가 들어옵니다. 당신은 <b style="color:var(--text)">직접 프롬프트를 씁니다.</b>
+        그 프롬프트는 실제 AI가 <b style="color:var(--text)">쓴 그대로</b> 실행합니다.
+        결과가 좋으면 돈을 벌고, 나쁘면 못 법니다. 객관식은 없습니다.
+      </p>
+    </div>
+
+    <div class="pillars mt22">
+      <div class="pillar"><b>진짜로 실행됩니다</b><span>당신의 프롬프트를 보완 없이 그대로 돌립니다. 부족하면 부족한 결과가 나옵니다.</span></div>
+      <div class="pillar"><b>5개 축으로 채점</b><span>역할·구체성·출력형식·제약·기준. 실무 프롬프트 엔지니어링 그대로입니다.</span></div>
+      <div class="pillar"><b>지수가 남습니다</b><span>AI 활용 지수가 쌓이고, 기준을 넘으면 수료 기록이 발급됩니다.</span></div>
+    </div>
+
+    <div class="card mt22">
+      <p class="eyebrow">등록</p>
+      <p class="mt8 dim" style="font-size:.88rem">순위표에 표시될 이름입니다. 실명이 아니어도 됩니다.</p>
+      <div class="mt14"><input type="text" id="nickInput" maxlength="16" placeholder="예: 김프롬" autocomplete="off"></div>
+      <div class="row mt14">
+        <button class="btn" id="startBtn">사업 시작</button>
+        <button class="btn btn--ghost" id="toBoardIntro">순위표 보기</button>
+      </div>
+      <p class="mt14 dim" id="introNote" style="font-size:.8rem"></p>
+    </div>
+  </section>
+
+  <!-- 미션 목록 -->
+  <section class="screen wrap hidden" id="scMap">
+    <p class="eyebrow">의뢰 목록</p>
+    <h2 class="mt8">오늘 들어온 일</h2>
+    <p class="mt8 dim" style="font-size:.9rem">앞 단계를 60점 이상으로 끝내야 다음 의뢰가 열립니다.</p>
+    <div class="missions" id="missionList"></div>
+    <div class="row mt22">
+      <button class="btn btn--ghost" id="toBoard">순위표</button>
+      <button class="btn btn--ghost" id="toCert">성적표 · 수료증</button>
+    </div>
+  </section>
+
+  <!-- 미션 플레이 -->
+  <section class="screen wrap hidden" id="scPlay">
+    <p class="eyebrow" id="playTag"></p>
+    <h2 class="mt8" id="playTitle"></h2>
+    <div class="brief mt14">
+      <p class="dim" style="font-size:.78rem;letter-spacing:.1em" id="playClient"></p>
+      <p class="mt8" id="playBrief"></p>
+    </div>
+    <div class="goal mt14" id="playGoal"></div>
+    <div class="mt22">
+      <p class="eyebrow">당신의 프롬프트</p>
+      <textarea id="promptBox" class="mt8" placeholder="여기에 AI에게 줄 지시를 직접 쓰십시오. 당신이 쓴 그대로 실행됩니다."></textarea>
+      <p class="counter" id="promptCount">0자</p>
+    </div>
+    <div class="row mt14">
+      <button class="btn" id="runBtn">AI에게 맡기기</button>
+      <button class="btn btn--ghost" id="backMap">돌아가기</button>
+    </div>
+    <p class="mt14 dim" id="playNote" style="font-size:.84rem"></p>
+  </section>
+
+  <!-- 결과 -->
+  <section class="screen wrap hidden" id="scResult">
+    <p class="eyebrow">결과</p>
+    <h2 class="verdict mt8" id="resVerdict"></h2>
+    <p class="mt8" id="resPay"></p>
+
+    <div class="card mt22">
+      <p class="eyebrow">AI가 실제로 내놓은 결과</p>
+      <p class="dim mt8" style="font-size:.82rem">당신의 프롬프트를 보완 없이 그대로 실행한 것입니다.</p>
+      <div class="out mt14" id="resOutput"></div>
+    </div>
+
+    <div class="card mt14">
+      <p class="eyebrow">채점</p>
+      <div class="scorebar" id="resScores"></div>
+    </div>
+
+    <div class="card mt14">
+      <p class="eyebrow">다음에 이렇게 쓰면 올라갑니다</p>
+      <ul class="fixes" id="resFixes"></ul>
+    </div>
+
+    <div class="card mt14">
+      <p class="eyebrow">모범 프롬프트</p>
+      <div class="out mt14" id="resModel"></div>
+    </div>
+
+    <div class="row mt22">
+      <button class="btn" id="resNext">다음 의뢰</button>
+      <button class="btn btn--ghost" id="resRetry">다시 쓰기</button>
+    </div>
+  </section>
+
+  <!-- 성적표 -->
+  <section class="screen wrap hidden" id="scCert">
+    <p class="eyebrow">성적표</p>
+    <h2 class="mt8">AI 활용 역량 기록</h2>
+    <div class="card mt14">
+      <div class="scorebar" id="certSkills"></div>
+    </div>
+    <div class="mt22" id="certBox"></div>
+    <div class="row mt22">
+      <button class="btn btn--ghost" id="certBack">의뢰 목록</button>
+    </div>
+  </section>
+
+  <!-- 순위표 -->
+  <section class="screen wrap hidden" id="scBoard">
+    <p class="eyebrow">순위표</p>
+    <h2 class="mt8">AI 활용 지수 상위</h2>
+    <div class="card mt14 tscroll">
+      <table>
+        <thead><tr><th>#</th><th>이름</th><th>등급</th><th style="text-align:right">지수</th><th style="text-align:right">자산</th></tr></thead>
+        <tbody id="boardBody"><tr><td colspan="5" class="dim">불러오는 중…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="row mt22"><button class="btn btn--ghost" id="boardBack">돌아가기</button></div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------------------------------------------- 평가 축 */
+  var AXES = [
+    { k: "role",        label: "역할·맥락",   hint: "AI에게 누구로서, 어떤 상황에서 일하는지 알려주었는가" },
+    { k: "specificity", label: "구체적 지시", hint: "무엇을 할지가 해석의 여지 없이 분명한가" },
+    { k: "format",      label: "출력 형식",   hint: "결과물의 형태·분량·구조를 지정했는가" },
+    { k: "constraints", label: "제약·금지",   hint: "하지 말아야 할 것과 지켜야 할 선을 걸었는가" },
+    { k: "criteria",    label: "기준·예시",   hint: "좋은 결과의 판단 기준이나 예시를 주었는가" }
+  ];
+
+  /* ---------------------------------------------------- 의뢰 */
+  var MISSIONS = [
+    {
+      id: "m1", title: "첫 의뢰 — 상품 소개글",
+      client: "동네 수제 비누 공방", teach: "역할·맥락",
+      pay: 300000,
+      brief: "공방 사장님이 온라인 판매를 시작합니다. 상품은 '라벤더 수제 비누, 100g, 9,800원, 인공향료 무첨가'. 사장님은 \"그냥 잘 좀 써주세요\"라고만 합니다.",
+      goal: "AI가 바로 쓸 수 있는 상품 소개글을 받아내십시오. <b>AI는 당신이 말해준 것만 압니다.</b> 누구에게 파는 글인지, 어떤 말투인지, 얼마나 길게 쓸지를 당신이 정해 주어야 합니다."
+    },
+    {
+      id: "m2", title: "불만 고객 응대",
+      client: "온라인 식품몰 CS팀", teach: "제약·금지",
+      pay: 500000,
+      brief: "배송이 3일 늦은 고객이 환불과 사과를 요구합니다. 회사 방침상 전액 환불은 불가하고 부분 보상(적립금 5,000원)만 가능합니다. 고객은 이미 화가 나 있습니다.",
+      goal: "고객에게 보낼 답변을 AI에게 쓰게 하십시오. 중요한 것은 <b>하지 말아야 할 것을 거는 일</b>입니다. 약속하면 안 되는 것, 쓰면 안 되는 표현을 지정하지 않으면 AI는 회사가 못 지킬 약속을 합니다."
+    },
+    {
+      id: "m3", title: "주문 데이터 정리",
+      client: "쇼핑몰 운영팀", teach: "출력 형식",
+      pay: 800000,
+      brief: "고객 주문이 메모장에 뒤섞여 있습니다. \"김철수 010-1111-2222 서울 강남 텀블러2개 / 이영희 010-3333-4444 부산 해운대 머그1개 당일발송요청\" 같은 식으로 300건입니다. 이걸 엑셀에 넣어야 합니다.",
+      goal: "AI가 <b>기계가 읽을 수 있는 형태</b>로 뱉게 하십시오. 표인지 JSON인지, 열 이름은 무엇인지, 값이 없을 때는 뭘 넣을지까지 지정해야 300건을 한 번에 처리할 수 있습니다."
+    },
+    {
+      id: "m4", title: "경쟁사 리뷰 분석",
+      client: "생활가전 브랜드 기획팀", teach: "구조화된 사고",
+      pay: 1200000,
+      brief: "경쟁사 제품 리뷰 2,000건을 모았습니다. 팀장은 \"우리가 뭘 만들어야 하는지 알고 싶다\"고 합니다. 단순 요약이 아니라 의사결정에 쓸 수 있는 결과가 필요합니다.",
+      goal: "AI에게 <b>분석의 단계</b>를 지정하십시오. 그냥 \"분석해줘\"라고 하면 뻔한 요약이 나옵니다. 무엇을 뽑고, 어떻게 묶고, 무엇을 근거로 우선순위를 매길지 지시해야 쓸모 있는 답이 나옵니다."
+    },
+    {
+      id: "m5", title: "광고 카피 20종",
+      client: "화장품 브랜드 마케팅팀", teach: "수량·다양성 통제",
+      pay: 1800000,
+      brief: "신제품 수분크림 광고를 A/B 테스트합니다. 서로 다른 소구점의 카피 20종이 필요합니다. 그냥 20개를 요청하면 비슷한 문장만 20개 나옵니다. 그리고 화장품은 과장광고 규제가 있습니다.",
+      goal: "<b>다양성을 강제하고 법적 선을 거십시오.</b> 소구 각도를 몇 종으로 나눌지, 각 카피의 글자 수, 쓰면 안 되는 표현(효과 보장, 100%, 최고 등)을 함께 지정해야 실제로 쓸 수 있는 20종이 나옵니다."
+    },
+    {
+      id: "m6", title: "계약서 핵심 추출",
+      client: "스타트업 대표", teach: "안전장치",
+      pay: 2500000,
+      brief: "투자 계약서 초안 40페이지를 받았습니다. 대표는 법률 전문가가 아니고, 변호사 검토 전에 쟁점을 먼저 파악하고 싶어 합니다. 여기서 AI가 \"문제없습니다\"라고 단정하면 큰일 납니다.",
+      goal: "AI가 <b>자기 한계를 지키게</b> 만드십시오. 무엇을 뽑을지 못지않게, 단정하지 말 것·법률 자문이 아님을 명시할 것·불확실하면 불확실하다고 말할 것을 지시해야 합니다. 이게 실무에서 AI를 안전하게 쓰는 핵심입니다."
+    },
+    {
+      id: "m7", title: "업무 자동화 설계",
+      client: "3인 기업 운영총괄", teach: "작업 분해",
+      pay: 4000000,
+      brief: "매주 월요일마다 3시간씩 걸리는 일이 있습니다. 여러 채널의 문의를 모아 분류하고, 답변 초안을 쓰고, 처리 현황을 보고서로 만듭니다. 이걸 AI로 줄이고 싶습니다.",
+      goal: "한 번의 거대한 요청은 실패합니다. <b>일을 단계로 쪼개고 각 단계의 입력과 출력을 정의</b>하도록 AI에게 지시하십시오. 단계별 연결 구조를 AI가 설계하게 만드는 것이 이 미션의 핵심입니다."
+    },
+    {
+      id: "m8", title: "최종 — 신규 사업 런칭",
+      client: "본인 회사", teach: "종합",
+      pay: 8000000,
+      brief: "그동안 번 돈으로 당신 회사를 차렸습니다. 첫 제품을 2주 뒤 출시합니다. 상품 기획, 가격, 판매 채널, 광고 소재, 고객 응대 지침까지 한 번에 필요합니다. 사람은 당신 혼자입니다.",
+      goal: "지금까지 배운 다섯 축을 <b>한 프롬프트에 모두</b> 담으십시오. 역할, 구체적 범위, 출력 형식, 제약 조건, 판단 기준. 이 미션 점수가 수료 판정의 기준이 됩니다."
+    }
+  ];
+
+  var RANKS = [
+    { min: 0,   name: "미등록" },
+    { min: 1,   name: "인턴" },
+    { min: 160, name: "주니어" },
+    { min: 320, name: "시니어" },
+    { min: 480, name: "리드" },
+    { min: 620, name: "디렉터" },
+    { min: 740, name: "AI 활용 능력자" }
+  ];
+  var CERT_AIQ = 560;
+  var CERT_MIN_SCORE = 70;
+
+  /* ---------------------------------------------------- 상태 */
+  var S = {
+    nick: "", assets: 0, aiq: 0,
+    results: {},        // missionId -> {total, scores, at}
+    certId: "", uid: null, ready: false
+  };
+  var sample = null, db = null, user = null;
+  var current = null, lastResult = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? "" : s); };
+
+  function won(n) { return Math.round(n).toLocaleString("ko-KR") + "원"; }
+
+  function rankOf(aiq) {
+    var r = RANKS[0];
+    for (var i = 0; i < RANKS.length; i++) if (aiq >= RANKS[i].min) r = RANKS[i];
+    return r.name;
+  }
+
+  function axisAverages() {
+    var sums = {}, n = 0;
+    AXES.forEach(function (a) { sums[a.k] = 0; });
+    Object.keys(S.results).forEach(function (id) {
+      var sc = S.results[id].scores || {};
+      AXES.forEach(function (a) { sums[a.k] += Number(sc[a.k]) || 0; });
+      n++;
+    });
+    var out = {};
+    AXES.forEach(function (a) { out[a.k] = n ? sums[a.k] / n : 0; });
+    return out;
+  }
+
+  function unlockedCount() {
+    var i = 0;
+    for (; i < MISSIONS.length; i++) {
+      var r = S.results[MISSIONS[i].id];
+      if (!r || r.total < 60) break;
+    }
+    return i; // 완료된 연속 미션 수 = 다음에 열리는 인덱스
+  }
+
+  function certEligible() {
+    if (S.aiq < CERT_AIQ) return false;
+    for (var i = 0; i < MISSIONS.length; i++) {
+      var r = S.results[MISSIONS[i].id];
+      if (!r || r.total < CERT_MIN_SCORE) return false;
+    }
+    return true;
+  }
+
+  /* ---------------------------------------------------- 저장 */
+  var LS = "aiop.v1";
+  function saveLocal() {
+    try { localStorage.setItem(LS, JSON.stringify(S)); } catch (e) {}
+  }
+  function loadLocal() {
+    try {
+      var raw = localStorage.getItem(LS);
+      if (!raw) return;
+      var o = JSON.parse(raw);
+      if (o && typeof o === "object") {
+        S.nick = o.nick || ""; S.assets = o.assets || 0; S.aiq = o.aiq || 0;
+        S.results = o.results || {}; S.certId = o.certId || "";
+      }
+    } catch (e) {}
+  }
+
+  function syncRow() {
+    if (!db || !S.uid || !S.nick) return;
+    db.collection("players").doc(S.uid).set({
+      nick: S.nick, aiq: Math.round(S.aiq), assets: Math.round(S.assets),
+      rank: rankOf(S.aiq), done: Object.keys(S.results).length,
+      cert: S.certId || "", updatedAt: Date.now()
+    }).catch(function () {});
+  }
+
+  /* ---------------------------------------------------- 화면 */
+  var SCREENS = ["scIntro", "scMap", "scPlay", "scResult", "scCert", "scBoard"];
+  function show(id) {
+    SCREENS.forEach(function (s) { $(s).classList.toggle("hidden", s !== id); });
+    window.scrollTo(0, 0);
+  }
+
+  function paintHud() {
+    $("hudAssets").textContent = won(S.assets);
+    $("hudAiq").textContent = Math.round(S.aiq);
+    $("hudRank").textContent = rankOf(S.aiq);
+  }
+
+  function toast(msg) {
+    var t = document.createElement("div");
+    t.className = "toast"; t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 3200);
+  }
+
+  function paintMissions() {
+    var open = unlockedCount();
+    var host = $("missionList");
+    host.textContent = "";
+    MISSIONS.forEach(function (m, i) {
+      var r = S.results[m.id];
+      var b = document.createElement("button");
+      b.className = "m" + (r ? " done" : "") + (i === open ? " open" : "");
+      b.disabled = i > open;
+      b.type = "button";
+
+      var n = document.createElement("div");
+      n.className = "m__n"; n.textContent = r ? "✓" : String(i + 1);
+
+      var mid = document.createElement("div");
+      mid.style.minWidth = "0";
+      var t = document.createElement("div"); t.className = "m__t"; t.textContent = m.title;
+      var s = document.createElement("div"); s.className = "m__s";
+      s.textContent = m.client + " · 배우는 것: " + m.teach;
+      mid.appendChild(t); mid.appendChild(s);
+
+      var right = document.createElement("div");
+      right.className = "m__r";
+      var big = document.createElement("b");
+      big.textContent = r ? r.total + "점" : won(m.pay);
+      var sub = document.createElement("span");
+      sub.textContent = b.disabled ? "잠김" : (r ? "다시 도전" : "보수");
+      right.appendChild(big); right.appendChild(sub);
+
+      b.appendChild(n); b.appendChild(mid); b.appendChild(right);
+      b.addEventListener("click", function () { openMission(m); });
+      host.appendChild(b);
+    });
+  }
+
+  function openMission(m) {
+    current = m;
+    $("playTag").textContent = "의뢰 · 배우는 것: " + m.teach;
+    $("playTitle").textContent = m.title;
+    $("playClient").textContent = "의뢰인 — " + m.client;
+    $("playBrief").textContent = m.brief;
+    $("playGoal").innerHTML = m.goal;
+    $("promptBox").value = "";
+    $("promptCount").textContent = "0자";
+    $("runBtn").disabled = false;
+    $("runBtn").textContent = "AI에게 맡기기";
+    $("playNote").textContent = sample ? "" :
+      "이 화면에서는 채점이 동작하지 않습니다. claude.ai에 로그인한 상태로 이 페이지를 열어야 AI가 실제로 실행합니다.";
+    show("scPlay");
+  }
+
+  /* ---------------------------------------------------- 채점 */
+  function buildGraderInput(m, prompt) {
+    var axisLines = AXES.map(function (a) {
+      return "- " + a.k + " (" + a.label + "): " + a.hint + " — 0~20점";
+    }).join("\n");
+
+    return [
+      "당신은 'AI 활용 능력 평가 엔진'입니다. 아래 두 가지를 순서대로 수행하고 JSON 하나만 출력하십시오.",
+      "",
+      "## 과제 상황",
+      "의뢰인: " + m.client,
+      "상황: " + m.brief,
+      "이 미션이 평가하려는 역량: " + m.teach,
+      "",
+      "## 플레이어가 작성한 프롬프트 (원문)",
+      "<<<PROMPT",
+      prompt,
+      "PROMPT>>>",
+      "",
+      "## 1단계 — 실행",
+      "위 프롬프트를 **있는 그대로** 실행한 결과를 `output` 에 쓰십시오.",
+      "절대 보완하지 마십시오. 프롬프트가 모호하면 모호한 대로, 형식 지정이 없으면 형식 없이,",
+      "맥락이 없으면 일반론으로 답하십시오. 플레이어가 자기 프롬프트의 실제 성능을 봐야 합니다.",
+      "프롬프트가 과제와 무관하거나 비어 있으면, 그 사실이 드러나는 결과를 쓰십시오.",
+      "길면 900자 이내로 줄이되 품질 수준은 그대로 드러내십시오.",
+      "",
+      "## 2단계 — 채점",
+      "다섯 축을 각각 0~20점으로 매기십시오.",
+      axisLines,
+      "",
+      "채점 원칙:",
+      "- 프롬프트에 **실제로 쓰여 있는 것**만 인정하십시오. 의도를 추측해 점수를 주지 마십시오.",
+      "- 길다고 점수를 주지 마십시오. 짧아도 해당 축을 충족하면 만점입니다.",
+      "- 한국어 외 언어로 써도 감점하지 마십시오. 내용만 봅니다.",
+      "- 후하게 주지 마십시오. 축을 전혀 다루지 않았으면 0~4점입니다.",
+      "",
+      "## 출력 JSON 형식",
+      '{ "output": "...", "scores": {"role":0,"specificity":0,"format":0,"constraints":0,"criteria":0},',
+      '  "verdict": "한 문장 총평 (한국어, 25자 이내)",',
+      '  "fixes": ["이 프롬프트에 무엇을 추가하면 몇 점 오르는지 구체적으로. 한국어 3~4개."],',
+      '  "model_prompt": "이 과제의 모범 프롬프트 전문. 한국어. 다섯 축을 모두 충족하되 실제로 쓸 법한 분량." }',
+      "",
+      "JSON 외에는 아무것도 출력하지 마십시오."
+    ].join("\n");
+  }
+
+  function clamp(v, lo, hi) { v = Number(v); if (!isFinite(v)) v = 0; return Math.max(lo, Math.min(hi, v)); }
+
+  function normalize(raw) {
+    var sc = (raw && raw.scores) || {};
+    var scores = {}, total = 0;
+    AXES.forEach(function (a) {
+      scores[a.k] = Math.round(clamp(sc[a.k], 0, 20));
+      total += scores[a.k];
+    });
+    var fixes = Array.isArray(raw && raw.fixes) ? raw.fixes.slice(0, 5).map(esc) : [];
+    return {
+      output: esc(raw && raw.output) || "(결과가 비어 있습니다)",
+      scores: scores, total: total,
+      verdict: esc(raw && raw.verdict) || "평가 완료",
+      fixes: fixes.length ? fixes : ["다섯 축(역할·구체성·형식·제약·기준)을 하나씩 문장으로 추가해 보십시오."],
+      model_prompt: esc(raw && raw.model_prompt) || "(모범 프롬프트를 불러오지 못했습니다)"
+    };
+  }
+
+  function run() {
+    if (!current) return;
+    var prompt = $("promptBox").value.trim();
+    if (prompt.length < 10) { toast("프롬프트를 10자 이상 써주십시오."); return; }
+    if (!sample) { toast("이 화면에서는 채점을 실행할 수 없습니다."); return; }
+
+    var btn = $("runBtn");
+    btn.disabled = true;
+    btn.textContent = "AI가 작업 중…";
+
+    sample.json(buildGraderInput(current, prompt), { modelTier: "complex" })
+      .then(function (raw) {
+        lastResult = normalize(raw);
+        applyResult(current, lastResult);
+        paintResult(current, lastResult);
+        show("scResult");
+      })
+      .catch(function (err) {
+        var code = err && err.code;
+        if (code === "rate_limited") toast("요청이 몰렸습니다. 잠시 후 다시 시도해 주십시오.");
+        else if (code === "not_granted") toast("AI 실행 권한이 없어 채점할 수 없습니다.");
+        else toast("채점에 실패했습니다. 다시 시도해 주십시오.");
+      })
+      .finally(function () {
+        btn.disabled = false;
+        btn.textContent = "AI에게 맡기기";
+      });
+  }
+
+  function applyResult(m, res) {
+    var prev = S.results[m.id];
+    var best = prev && prev.total >= res.total ? prev : { total: res.total, scores: res.scores, at: Date.now() };
+    var gainAiq = prev ? Math.max(0, res.total - prev.total) : res.total;
+    // 보수는 점수 비례. 60점 미만이면 절반만 받는다.
+    var rate = res.total / 100;
+    var pay = Math.round(m.pay * rate * (res.total < 60 ? 0.5 : 1));
+
+    S.results[m.id] = best;
+    S.aiq += gainAiq;
+    S.assets += pay;
+    res.pay = pay;
+
+    if (!S.certId && certEligible()) {
+      S.certId = "AIOP-" + new Date().getFullYear() + "-" +
+        Math.abs(hash(S.nick + S.uid + Math.round(S.aiq))).toString(36).toUpperCase().slice(0, 8);
+      toast("수료 기준을 충족했습니다. 성적표에서 확인하십시오.");
+    }
+    paintHud(); saveLocal(); syncRow();
+  }
+
+  function hash(s) {
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h | 0;
+  }
+
+  function bars(host, scores, max) {
+    host.textContent = "";
+    AXES.forEach(function (a) {
+      var row = document.createElement("div"); row.className = "sb";
+      var l = document.createElement("div"); l.textContent = a.label;
+      var t = document.createElement("div"); t.className = "sb__t";
+      var f = document.createElement("div"); f.className = "sb__f";
+      var v = Number(scores[a.k]) || 0;
+      f.style.width = Math.round((v / max) * 100) + "%";
+      f.style.background = v / max >= 0.75 ? "var(--green)" : (v / max >= 0.4 ? "var(--cyan)" : "var(--red)");
+      t.appendChild(f);
+      var n = document.createElement("div"); n.className = "sb__v"; n.textContent = Math.round(v);
+      row.appendChild(l); row.appendChild(t); row.appendChild(n);
+      host.appendChild(row);
+    });
+  }
+
+  function paintResult(m, res) {
+    $("resVerdict").textContent = res.total + "점 — " + res.verdict;
+    $("resVerdict").style.color = res.total >= 75 ? "var(--green)" : (res.total >= 60 ? "var(--gold)" : "var(--red)");
+    $("resPay").innerHTML = "보수 <b style='color:var(--gold)'>" + won(res.pay) + "</b>" +
+      (res.total < 60 ? " <span class='dim'>— 60점 미만이라 절반만 받았습니다. 다음 의뢰는 아직 잠겨 있습니다.</span>" : "");
+    $("resOutput").textContent = res.output;
+    bars($("resScores"), res.scores, 20);
+    var ul = $("resFixes"); ul.textContent = "";
+    res.fixes.forEach(function (f) {
+      var li = document.createElement("li"); li.textContent = f; ul.appendChild(li);
+    });
+    $("resModel").textContent = res.model_prompt;
+    $("resNext").textContent = res.total >= 60 ? "다음 의뢰" : "의뢰 목록";
+  }
+
+  /* ---------------------------------------------------- 성적표 */
+  function paintCert() {
+    bars($("certSkills"), axisAverages(), 20);
+    var box = $("certBox");
+    box.textContent = "";
+    var done = Object.keys(S.results).length;
+
+    if (certEligible() && S.certId) {
+      var c = document.createElement("div"); c.className = "cert";
+      var seal = document.createElement("div"); seal.className = "cert__seal";
+      seal.textContent = "AI 활용 역량 수료";
+      var name = document.createElement("h3"); name.className = "cert__name"; name.textContent = S.nick;
+      var line = document.createElement("p");
+      line.innerHTML = "<b style='color:var(--gold)'>" + rankOf(S.aiq) + "</b> · AI 활용 지수 " +
+        Math.round(S.aiq) + " · 의뢰 " + done + "건 완수";
+      var axes = document.createElement("p");
+      axes.className = "dim"; axes.style.fontSize = ".85rem"; axes.style.marginTop = "10px";
+      axes.textContent = "역할·구체성·출력형식·제약·기준 다섯 축 전 과제 " + CERT_MIN_SCORE + "점 이상";
+      var id = document.createElement("p"); id.className = "cert__id"; id.textContent = "등록번호 " + S.certId;
+      var note = document.createElement("p");
+      note.className = "dim"; note.style.fontSize = ".76rem"; note.style.marginTop = "14px";
+      note.textContent = "본 기록은 게임 내 평가 결과입니다. 공인 자격이 아닙니다.";
+      [seal, name, line, axes, id, note].forEach(function (el) { c.appendChild(el); });
+      box.appendChild(c);
+    } else {
+      var card = document.createElement("div"); card.className = "card";
+      var h = document.createElement("h3"); h.textContent = "수료까지 남은 것";
+      var p = document.createElement("p"); p.className = "mt8 dim"; p.style.fontSize = ".9rem";
+      var need = [];
+      if (S.aiq < CERT_AIQ) need.push("AI 활용 지수 " + Math.round(CERT_AIQ - S.aiq) + " 더 필요");
+      var low = MISSIONS.filter(function (m) {
+        var r = S.results[m.id]; return !r || r.total < CERT_MIN_SCORE;
+      });
+      if (low.length) need.push("다음 의뢰를 " + CERT_MIN_SCORE + "점 이상으로: " +
+        low.map(function (m) { return m.title; }).join(", "));
+      p.textContent = need.join(" · ") || "조건을 확인하는 중입니다.";
+      card.appendChild(h); card.appendChild(p);
+      box.appendChild(card);
+    }
+  }
+
+  /* ---------------------------------------------------- 순위표 */
+  function paintBoard() {
+    var body = $("boardBody");
+    body.textContent = "";
+    if (!db) {
+      var tr = document.createElement("tr");
+      var td = document.createElement("td");
+      td.colSpan = 5; td.className = "dim";
+      td.textContent = "순위표는 claude.ai에 로그인한 상태에서만 보입니다.";
+      tr.appendChild(td); body.appendChild(tr);
+      return;
+    }
+    db.collection("players").orderBy("aiq", "desc").limit(20).get()
+      .then(function (snap) {
+        var rows = [];
+        snap.forEach(function (d) { rows.push(d.data()); });
+        body.textContent = "";
+        if (!rows.length) {
+          var tr0 = document.createElement("tr");
+          var td0 = document.createElement("td");
+          td0.colSpan = 5; td0.className = "dim"; td0.textContent = "아직 기록이 없습니다. 첫 번째가 되십시오.";
+          tr0.appendChild(td0); body.appendChild(tr0);
+          return;
+        }
+        rows.forEach(function (r, i) {
+          var tr = document.createElement("tr");
+          if (r.nick === S.nick) tr.className = "me";
+          [String(i + 1), esc(r.nick) || "익명", esc(r.rank) || "-"].forEach(function (v) {
+            var td = document.createElement("td"); td.textContent = v; tr.appendChild(td);
+          });
+          var a = document.createElement("td"); a.className = "n"; a.textContent = Math.round(r.aiq || 0);
+          var b = document.createElement("td"); b.className = "n"; b.textContent = won(r.assets || 0);
+          tr.appendChild(a); tr.appendChild(b);
+          body.appendChild(tr);
+        });
+      })
+      .catch(function () {
+        body.textContent = "";
+        var tr = document.createElement("tr"); var td = document.createElement("td");
+        td.colSpan = 5; td.className = "dim"; td.textContent = "순위표를 불러오지 못했습니다.";
+        tr.appendChild(td); body.appendChild(tr);
+      });
+  }
+
+  /* ---------------------------------------------------- 이벤트 */
+  $("promptBox").addEventListener("input", function () {
+    $("promptCount").textContent = this.value.length + "자";
+  });
+  $("startBtn").addEventListener("click", function () {
+    var n = $("nickInput").value.trim();
+    if (n.length < 1) { toast("이름을 입력해 주십시오."); return; }
+    S.nick = n.slice(0, 16);
+    if (S.aiq === 0) { S.assets = 0; }
+    paintHud(); saveLocal(); syncRow();
+    paintMissions(); show("scMap");
+  });
+  $("runBtn").addEventListener("click", run);
+  $("backMap").addEventListener("click", function () { paintMissions(); show("scMap"); });
+  $("resRetry").addEventListener("click", function () { openMission(current); });
+  $("resNext").addEventListener("click", function () { paintMissions(); show("scMap"); });
+  $("toBoard").addEventListener("click", function () { paintBoard(); show("scBoard"); });
+  $("toBoardIntro").addEventListener("click", function () { paintBoard(); show("scBoard"); });
+  $("boardBack").addEventListener("click", function () {
+    show(S.nick ? "scMap" : "scIntro"); if (S.nick) paintMissions();
+  });
+  $("toCert").addEventListener("click", function () { paintCert(); show("scCert"); });
+  $("certBack").addEventListener("click", function () { paintMissions(); show("scMap"); });
+
+  /* ---------------------------------------------------- 시동 */
+  loadLocal();
+  paintHud();
+  if (S.nick) { $("nickInput").value = S.nick; paintMissions(); show("scMap"); }
+
+  (async function boot() {
+    try { sample = await (window.claude && window.claude.use ? window.claude.use("sample") : null); } catch (e) {}
+    try { user = await (window.claude && window.claude.use ? window.claude.use("user") : null); } catch (e) {}
+    try { db = await (window.claude && window.claude.use ? window.claude.use("db") : null); } catch (e) {}
+
+    if (user) { try { S.uid = await user.id(); } catch (e) {} }
+    if (!S.uid) S.uid = "local-" + Math.abs(hash(S.nick + navigator.userAgent)).toString(36);
+
+    $("introNote").textContent = sample
+      ? "채점은 실제 AI가 수행합니다. 첫 실행 시 권한을 한 번 묻습니다."
+      : "지금 이 화면에서는 AI 채점이 동작하지 않습니다. claude.ai에 로그인한 상태로 열어 주십시오.";
+
+    if (S.nick) syncRow();
+    S.ready = true;
+  })();
+})();
