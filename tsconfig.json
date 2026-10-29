@@ -2,7 +2,10 @@
   "files": [],
   "references": [
     { "path": "./packages/core" },
+    { "path": "./packages/opc" },
     { "path": "./packages/hwpx" },
-    { "path": "./packages/hwp5" }
+    { "path": "./packages/hwp5" },
+    { "path": "./packages/docx" },
+    { "path": "./packages/pptx" }
   ]
 }

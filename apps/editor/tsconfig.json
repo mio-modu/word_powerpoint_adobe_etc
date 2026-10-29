@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["vite/client"],
+    "paths": {
+      "@jamo/core": ["../../packages/core/src/index.ts"],
+      "@jamo/opc": ["../../packages/opc/src/index.ts"],
+      "@jamo/hwpx": ["../../packages/hwpx/src/index.ts"],
+      "@jamo/hwp5": ["../../packages/hwp5/src/index.ts"],
+      "@jamo/docx": ["../../packages/docx/src/index.ts"],
+      "@jamo/pptx": ["../../packages/pptx/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
+}

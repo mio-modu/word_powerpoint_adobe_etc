@@ -1,0 +1,12 @@
+{
+  "name": "@jamo/hwp5",
+  "version": "0.1.0",
+  "description": "HWP 5.0 바이너리 읽기 (CFB + 레코드 스트림) — 순수 TypeScript",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "sideEffects": false,
+  "dependencies": { "@jamo/core": "0.1.0", "fflate": "^0.8.2" }
+}

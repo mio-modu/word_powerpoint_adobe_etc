@@ -45,6 +45,14 @@ export function serializeXml(doc: XmlDocument, options: SerializeOptions = {}): 
   const parts: string[] = [];
   if (options.declaration !== false) {
     const d = doc.declaration ?? { version: '1.0', encoding: 'UTF-8', standalone: 'yes' };
+    if (d.raw) {
+      parts.push(d.raw);
+      if (options.indent !== undefined) parts.push('\n');
+      for (const node of doc.prolog) parts.push(writeNode(node, options, 0));
+      parts.push(writeNode(doc.root, options, 0));
+      for (const node of doc.epilog) parts.push(writeNode(node, options, 0));
+      return parts.join('');
+    }
     let decl = `<?xml version="${d.version}"`;
     if (d.encoding) decl += ` encoding="${d.encoding}"`;
     if (d.standalone) decl += ` standalone="${d.standalone}"`;

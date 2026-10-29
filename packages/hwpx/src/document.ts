@@ -6,6 +6,7 @@ import {
   emptyPageSetup,
   entryToString,
   firstChild,
+  isTable,
   looksLikeZip,
   parseXml,
   serializeXml,
@@ -15,16 +16,38 @@ import {
   textContent,
   unzip,
   zip,
+  type CharStyle,
   type DocMeta,
+  type JamoBlock,
   type JamoParagraph,
   type JamoRun,
   type JamoSection,
+  type JamoTable,
   type JamoTextDocument,
   type PageSetup,
+  type ParagraphStyle,
   type XmlDocument,
   type XmlElement,
   type ZipEntries,
 } from '@jamo/core';
+import {
+  buildTable,
+  cellParagraphs,
+  ensureTableBorderFill,
+  insertColumn,
+  insertRow,
+  readTable,
+  removeColumn,
+  removeRow,
+  tablesIn,
+  wrapTableInParagraph,
+  cellAt,
+  cellGrid,
+  mergeCells,
+  setCellShade,
+  splitCell,
+  DEFAULT_TEXT_WIDTH,
+} from './table.js';
 import {
   blankContainerXml,
   blankContentHpf,
@@ -37,7 +60,16 @@ import {
   type BlankOptions,
 } from './blank.js';
 import { ENTRY, ENTRY_ORDER, FILE_ID, MIME, sectionEntry, sectionId } from './constants.js';
-import { readPageSetup, readStyleTables, charStyleFrom, paragraphStyleFrom, type HwpxStyleTables } from './styles.js';
+import { StyleRegistry, fillSection } from './convert.js';
+import { findOrCreateCharPr, findOrCreateParaPr } from './format.js';
+import {
+  cellShadeOf,
+  charStyleFrom,
+  paragraphStyleFrom,
+  readPageSetup,
+  readStyleTables,
+  type HwpxStyleTables,
+} from './styles.js';
 
 export class HwpxError extends Error {
   constructor(message: string) {
@@ -86,6 +118,15 @@ export class HwpxFile {
     if (mimetype !== undefined && mimetype !== MIME.hwpx) {
       throw new HwpxError(`예상과 다른 mimetype 입니다: ${mimetype}`);
     }
+    // DOCX/PPTX 도 ZIP 이고 mimetype 항목이 없다. 표식이 하나도 없으면
+    // HWPX 로 받아들이지 않는다. 받아들여 놓고 나중에 터지면, 호출하는
+    // 쪽에서는 "열렸는데 깨진 파일" 로 보여 원인을 찾기 어렵다.
+    if (mimetype === undefined && !entries.has(ENTRY.contentHpf)) {
+      const hint = entries.has('[Content_Types].xml')
+        ? ' OOXML(.docx/.pptx) 로 보입니다.'
+        : '';
+      throw new HwpxError(`HWPX 파일이 아닙니다 (mimetype 과 ${ENTRY.contentHpf} 둘 다 없음).${hint}`);
+    }
     const file = new HwpxFile(entries);
     // content.hpf 는 어느 파트가 XML 인지 알려주는 지도다. 먼저 읽어야 한다.
     file.xml(ENTRY.contentHpf);
@@ -104,6 +145,49 @@ export class HwpxFile {
     file.parsed.set(ENTRY.settings, blankSettingsXml());
     file.parsed.set(ENTRY.header, blankHeaderXml());
     file.parsed.set(sectionEntry(0), blankSectionXml(opts));
+    return file;
+  }
+
+
+  /**
+   * 중립 모델에서 HWPX 를 새로 만든다 (HWP 5.0 / DOCX → HWPX 변환 경로).
+   *
+   * 모델에 나오는 서로 다른 서식을 header.xml 표로 모은 뒤 본문이 그 번호를
+   * 가리키게 한다. 같은 서식은 표를 재사용하므로 문단이 많아도 표가 커지지 않는다.
+   */
+  static fromModel(model: JamoTextDocument, opts: BlankOptions = {}): HwpxFile {
+    const firstSection = model.sections[0];
+    const paper = firstSection
+      ? { width: firstSection.page.width, height: firstSection.page.height }
+      : undefined;
+    const file = HwpxFile.blank({ ...opts, paper });
+    for (let i = 1; i < model.sections.length; i += 1) file.addSection({ paper });
+
+    const refList = firstChild(file.header, 'hh:refList');
+    if (!refList) throw new HwpxError('header.xml 에 hh:refList 가 없습니다');
+    const fontfaces = firstChild(refList, 'hh:fontfaces');
+    const charProperties = firstChild(refList, 'hh:charProperties');
+    const paraProperties = firstChild(refList, 'hh:paraProperties');
+    if (!fontfaces || !charProperties || !paraProperties) {
+      throw new HwpxError('header.xml 의 참조 표가 불완전합니다');
+    }
+    const registry = new StyleRegistry(fontfaces, charProperties, paraProperties);
+    // 표가 하나라도 있으면 테두리용 borderFill 을 미리 만들어 둔다.
+    const hasTable = model.sections.some((s) => s.blocks.some((b) => isTable(b)));
+    const tableBorderFillIDRef = hasTable ? ensureTableBorderFill(file.header) : undefined;
+
+    model.sections.forEach((section, index) => {
+      const root = file.sectionRoot(index);
+      fillSection(
+        { sectionRoot: root, registry, tableBorderFillIDRef, headerRoot: file.header },
+        section.blocks,
+      );
+      applyPageSetup(root, section.page);
+    });
+
+    // header.xml 을 고쳤으므로 서식 표 캐시를 버린다.
+    file.styleTables = undefined;
+    if (Object.keys(model.meta).length > 0) file.setMeta(model.meta);
     return file;
   }
 
@@ -374,8 +458,19 @@ export class HwpxFile {
 
   removeParagraph(sectionIndex: number, p: XmlElement): boolean {
     const sec = this.sectionRoot(sectionIndex);
-    const i = sec.children.indexOf(p);
-    if (i < 0) return false;
+    let i = sec.children.indexOf(p);
+    if (i < 0) {
+      // 표 셀 안의 문단일 수 있다. 그 경우 셀의 subList 에서 지운다.
+      const parent = findParentOf(sec, p);
+      if (!parent) return false;
+      if (childElements(parent, 'hp:p').length <= 1) {
+        // 셀에 문단이 하나뿐이면 지우지 않고 비운다. 빈 셀은 문단 없이 존재할 수 없다.
+        this.setParagraphText(p, '');
+        return true;
+      }
+      parent.children.splice(parent.children.indexOf(p), 1);
+      return true;
+    }
     // hp:secPr 를 품은 첫 문단을 지우면 섹션 설정이 날아간다. 내용만 비운다.
     const holdsSecPr = childElements(p, 'hp:run').some((r) => firstChild(r, 'hp:secPr'));
     if (holdsSecPr) {
@@ -386,13 +481,188 @@ export class HwpxFile {
     return true;
   }
 
+  // ------------------------------------------------------------------- 서식
+
+  /**
+   * 런의 글자 서식을 바꾼다.
+   *
+   * 지금 서식을 읽어 patch 를 덮은 뒤, 같은 서식의 charPr 이 있으면 그 번호를
+   * 쓰고 없으면 새로 만든다. 우리가 해석하지 못하는 속성(그림자, 외곽선 등)은
+   * 원래 charPr 에서 복제되므로 유실되지 않는다.
+   */
+  setRunStyle(run: XmlElement, patch: Partial<CharStyle>): void {
+    const id = findOrCreateCharPr(this.header, attr(run, 'charPrIDRef'), patch);
+    setAttr(run, 'charPrIDRef', id);
+    this.styleTables = undefined;
+  }
+
+  /** 문단의 모든 런에 같은 글자 서식을 적용한다. */
+  setParagraphRunStyle(p: XmlElement, patch: Partial<CharStyle>): void {
+    for (const run of childElements(p, 'hp:run')) this.setRunStyle(run, patch);
+  }
+
+  /** 문단 서식(정렬·들여쓰기·줄간격)을 바꾼다. */
+  setParagraphFormat(p: XmlElement, patch: Partial<ParagraphStyle>): void {
+    const id = findOrCreateParaPr(this.header, attr(p, 'paraPrIDRef'), patch);
+    setAttr(p, 'paraPrIDRef', id);
+    this.styleTables = undefined;
+  }
+
+  /** 문단의 현재 글자 서식 (첫 런 기준). */
+  runStyleOf(p: XmlElement): CharStyle | undefined {
+    const run = childElements(p, 'hp:run')[0];
+    return run ? charStyleFrom(this.styles, attr(run, 'charPrIDRef')) : undefined;
+  }
+
+  paragraphStyleOf(p: XmlElement): ParagraphStyle | undefined {
+    return paragraphStyleFrom(this.styles, attr(p, 'paraPrIDRef'), attr(p, 'styleIDRef'));
+  }
+
+  // --------------------------------------------------------------------- 표
+
+  /** 섹션 안의 모든 표 요소 (문서 순서). */
+  tables(sectionIndex: number): XmlElement[] {
+    const out: XmlElement[] = [];
+    for (const p of childElements(this.sectionRoot(sectionIndex), 'hp:p')) {
+      out.push(...tablesIn(p));
+    }
+    return out;
+  }
+
+  /**
+   * 표를 넣는다. `after` 문단 바로 뒤에 들어가고, 없으면 섹션 끝에 붙는다.
+   *
+   * 표 자체는 문단 안의 런에 들어가야 하므로 문단으로 감싼다.
+   */
+  insertTable(
+    sectionIndex: number,
+    rows: number,
+    cols: number,
+    options: { after?: XmlElement; text?: string[][]; width?: number } = {},
+  ): XmlElement {
+    if (rows < 1 || cols < 1) throw new HwpxError('표는 최소 1줄 1칸이어야 합니다');
+    const sec = this.sectionRoot(sectionIndex);
+    const borderFillIDRef = ensureTableBorderFill(this.header);
+    this.styleTables = undefined;
+
+    const existing = childElements(sec, 'hp:p');
+    const template = options.after ?? existing[existing.length - 1];
+    const tbl = buildTable({
+      rows,
+      cols,
+      borderFillIDRef,
+      width: options.width ?? DEFAULT_TEXT_WIDTH,
+      paraPrIDRef: (template && attr(template, 'paraPrIDRef')) ?? '0',
+      charPrIDRef: inheritedCharPrIdRef(template) ?? '0',
+      text: options.text,
+    });
+    const holder = wrapTableInParagraph(
+      tbl,
+      (template && attr(template, 'paraPrIDRef')) ?? '0',
+      inheritedCharPrIdRef(template) ?? '0',
+      nextParagraphId(existing),
+    );
+
+    if (options.after) {
+      const i = sec.children.indexOf(options.after);
+      if (i >= 0) sec.children.splice(i + 1, 0, holder);
+      else sec.children.push(holder);
+    } else {
+      sec.children.push(holder);
+    }
+    sec.selfClosed = false;
+    return tbl;
+  }
+
+  /** 표를 지운다. 표를 감싼 문단에 다른 내용이 없으면 문단째 지운다. */
+  removeTable(sectionIndex: number, tbl: XmlElement): boolean {
+    const sec = this.sectionRoot(sectionIndex);
+    for (const p of childElements(sec, 'hp:p')) {
+      for (const run of childElements(p, 'hp:run')) {
+        const i = run.children.indexOf(tbl);
+        if (i < 0) continue;
+        run.children.splice(i, 1);
+        const stillHasContent = childElements(p, 'hp:run').some((r) =>
+          r.children.some(
+            (c) => c.kind === 'element' && (c.name === 'hp:t' || c.name === 'hp:tbl'),
+          ),
+        );
+        if (!stillHasContent) this.removeParagraph(sectionIndex, p);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** 표의 셀 문단들을 줄×칸 격자로 돌려준다. */
+  static cells(tbl: XmlElement): XmlElement[][] {
+    return childElements(tbl, 'hp:tr').map((tr) =>
+      childElements(tr, 'hp:tc').map((tc) => cellParagraphs(tc)[0]).filter((p): p is XmlElement => p !== undefined),
+    );
+  }
+
+  static insertRow(tbl: XmlElement, afterRow: number): boolean {
+    return insertRow(tbl, afterRow);
+  }
+
+  static removeRow(tbl: XmlElement, row: number): boolean {
+    return removeRow(tbl, row);
+  }
+
+  static insertColumn(tbl: XmlElement, afterCol: number): boolean {
+    return insertColumn(tbl, afterCol);
+  }
+
+  static removeColumn(tbl: XmlElement, col: number): boolean {
+    return removeColumn(tbl, col);
+  }
+
+  /** 격자 좌표의 셀. 병합된 자리는 주인 셀을 돌려준다. */
+  static cellAt(tbl: XmlElement, row: number, col: number): XmlElement | undefined {
+    return cellAt(tbl, row, col);
+  }
+
+  /** 격자 전체. 화면에서 셀 범위를 고를 때 쓴다. */
+  static grid(tbl: XmlElement): Array<Array<XmlElement | undefined>> {
+    return cellGrid(tbl);
+  }
+
+  static mergeCells(tbl: XmlElement, r1: number, c1: number, r2: number, c2: number): boolean {
+    return mergeCells(tbl, r1, c1, r2, c2);
+  }
+
+  static splitCell(tbl: XmlElement, row: number, col: number): boolean {
+    return splitCell(tbl, row, col);
+  }
+
+  /** 셀 배경색. `color` 를 비우면 색을 걷어낸다. */
+  setCellShade(tbl: XmlElement, row: number, col: number, color: string | undefined): boolean {
+    const tc = cellAt(tbl, row, col);
+    if (!tc) return false;
+    const plain = ensureTableBorderFill(this.header);
+    setCellShade(this.header, tc, color, plain);
+    this.styleTables = undefined;
+    return true;
+  }
+
   // -------------------------------------------------------------------- 모델화
 
   getText(): string {
     const out: string[] = [];
     for (let i = 0; i < this.sectionCount; i += 1) {
       for (const p of childElements(this.sectionRoot(i), 'hp:p')) {
-        out.push(HwpxFile.paragraphText(p));
+        const tables = tablesIn(p);
+        const text = HwpxFile.paragraphText(p);
+        if (text !== '' || tables.length === 0) out.push(text);
+        for (const tbl of tables) {
+          for (const tr of childElements(tbl, 'hp:tr')) {
+            out.push(
+              childElements(tr, 'hp:tc')
+                .map((tc) => cellParagraphs(tc).map(HwpxFile.paragraphText).join(' '))
+                .join('\t'),
+            );
+          }
+        }
       }
     }
     return out.join('\n');
@@ -403,10 +673,7 @@ export class HwpxFile {
     const sections: JamoSection[] = [];
     for (let i = 0; i < this.sectionCount; i += 1) {
       const root = this.sectionRoot(i);
-      sections.push({
-        page: pageSetupOf(root),
-        paragraphs: childElements(root, 'hp:p').map((p) => paragraphOf(p, tables)),
-      });
+      sections.push({ page: pageSetupOf(root), blocks: blocksOf(root, tables) });
     }
     return { kind: 'text', meta: this.meta, sections };
   }
@@ -528,4 +795,73 @@ function pageSetupOf(sectionRoot: XmlElement): PageSetup {
         }
       : base.margin,
   };
+}
+
+/** 모델의 용지 설정을 섹션의 hp:secPr 에 반영한다. */
+function applyPageSetup(sectionRoot: XmlElement, page: PageSetup): void {
+  const secPr = readPageSetup(sectionRoot);
+  if (!secPr) return;
+  const pagePr = firstChild(secPr, 'hp:pagePr');
+  if (!pagePr) return;
+  setAttr(pagePr, 'width', String(Math.round(page.width)));
+  setAttr(pagePr, 'height', String(Math.round(page.height)));
+  // HWPX 의 landscape 는 "용지를 어느 쪽으로 넓게 쓰는지"를 가리킨다.
+  setAttr(pagePr, 'landscape', page.landscape ? 'NARROWLY' : 'WIDELY');
+  const margin = firstChild(pagePr, 'hp:margin');
+  if (!margin) return;
+  const m = page.margin;
+  for (const [name, value] of [
+    ['left', m.left],
+    ['right', m.right],
+    ['top', m.top],
+    ['bottom', m.bottom],
+    ['header', m.header],
+    ['footer', m.footer],
+    ['gutter', m.gutter],
+  ] as const) {
+    setAttr(margin, name, String(Math.round(value)));
+  }
+}
+
+/** 섹션 본문을 문단/표 블록 목록으로 바꾼다. */
+function blocksOf(sectionRoot: XmlElement, tables: HwpxStyleTables): JamoBlock[] {
+  const blocks: JamoBlock[] = [];
+  for (const p of childElements(sectionRoot, 'hp:p')) {
+    const inner = tablesIn(p);
+    const text = HwpxFile.paragraphText(p);
+    // 표만 담은 문단은 빈 문단을 따로 내보내지 않는다. 화면에 빈 줄이 생긴다.
+    if (text !== '' || inner.length === 0) blocks.push(paragraphOf(p, tables));
+    for (const tbl of inner) blocks.push(tableOf(tbl, tables));
+  }
+  return blocks;
+}
+
+function tableOf(tbl: XmlElement, tables: HwpxStyleTables): JamoTable {
+  const model = readTable(tbl);
+  const cells = childElements(tbl, 'hp:tr').flatMap((tr) => childElements(tr, 'hp:tc'));
+  let at = 0;
+  for (const row of model.rows) {
+    for (const cell of row.cells) {
+      const subList = cell.source as XmlElement | undefined;
+      cell.paragraphs = subList
+        ? childElements(subList, 'hp:p').map((p) => paragraphOf(p, tables))
+        : [];
+      if (cell.paragraphs.length === 0) cell.paragraphs = [{ runs: [{ text: '' }] }];
+      const tc = cells[at];
+      at += 1;
+      if (tc) cell.shade = cellShadeOf(tables, attr(tc, 'borderFillIDRef'));
+    }
+  }
+  return model;
+}
+
+/** `child` 를 직접 담고 있는 부모 요소를 찾는다. */
+function findParentOf(root: XmlElement, child: XmlElement): XmlElement | undefined {
+  if (root.children.includes(child)) return root;
+  for (const node of root.children) {
+    if (node.kind !== 'element') continue;
+    const hit = findParentOf(node, child);
+    if (hit) return hit;
+  }
+  return undefined;
 }

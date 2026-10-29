@@ -1,5 +1,8 @@
 import { defineConfig } from 'vitest/config';
 
+const pkg = (name: string): string =>
+  new URL(`./packages/${name}/src/index.ts`, import.meta.url).pathname;
+
 export default defineConfig({
   test: {
     include: ['packages/*/test/**/*.test.ts'],
@@ -7,9 +10,12 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@jamo/core': new URL('./packages/core/src/index.ts', import.meta.url).pathname,
-      '@jamo/hwpx': new URL('./packages/hwpx/src/index.ts', import.meta.url).pathname,
-      '@jamo/hwp5': new URL('./packages/hwp5/src/index.ts', import.meta.url).pathname,
+      '@jamo/core': pkg('core'),
+      '@jamo/opc': pkg('opc'),
+      '@jamo/hwpx': pkg('hwpx'),
+      '@jamo/hwp5': pkg('hwp5'),
+      '@jamo/docx': pkg('docx'),
+      '@jamo/pptx': pkg('pptx'),
     },
   },
 });

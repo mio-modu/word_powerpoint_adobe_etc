@@ -1,0 +1,12 @@
+{
+  "name": "@jamo/opc",
+  "version": "0.1.0",
+  "description": "OPC(Open Packaging Conventions) 레이어 — DOCX/PPTX/XLSX 공용",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "sideEffects": false,
+  "dependencies": { "@jamo/core": "0.1.0" }
+}

@@ -1,0 +1,865 @@
+/*
+ * 문서 편집기의 화면은 "종이"가 주인공이다. UI 색은 가라앉히고 본문이
+ * 가장 밝고 선명하게 보이도록 한다. 어두운 테마에서도 종이는 흰색을
+ * 유지한다 — 인쇄 결과와 다르게 보이면 그게 더 불편하다.
+ */
+
+:root {
+  --bg: #f1f2f4;
+  --panel: #ffffff;
+  --panel-2: #fafafa;
+  --ink: #16181d;
+  --ink-muted: #6b7280;
+  --line: #d9dce1;
+  --accent: #1f6feb;
+  --accent-ink: #ffffff;
+  --danger-bg: #fdecea;
+  --danger-ink: #8a1c13;
+  --info-bg: #eef5ff;
+  --info-ink: #16418a;
+  --radius: 8px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 24px rgba(16, 24, 40, 0.08);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171c;
+    --panel: #1d2026;
+    --panel-2: #23262d;
+    --ink: #e8eaed;
+    --ink-muted: #9aa1ac;
+    --line: #32363f;
+    --danger-bg: #3a1a16;
+    --danger-ink: #ffb4aa;
+    --info-bg: #15263f;
+    --info-ink: #a9c8ff;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font:
+    14px/1.5 'Noto Sans KR',
+    'Malgun Gothic',
+    '맑은 고딕',
+    'Apple SD Gothic Neo',
+    system-ui,
+    sans-serif;
+}
+
+code {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ------------------------------------------------------------------ 툴바 */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-right: 4px;
+}
+
+.brand-mark {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-size: 16px;
+}
+
+.brand-sub {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-muted);
+}
+
+.menu {
+  position: relative;
+}
+
+.menu-items {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+
+.menu-items button {
+  background: transparent;
+  border: none;
+  text-align: left;
+  border-radius: 6px;
+}
+
+.menu-items button:hover {
+  background: var(--panel-2);
+}
+
+.zoom {
+  gap: 2px;
+}
+
+.zoom span {
+  min-width: 48px;
+  text-align: center;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.filename {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 36ch;
+}
+
+.muted {
+  color: var(--ink-muted);
+}
+
+.hint {
+  flex-basis: 100%;
+  font-size: 12px;
+}
+
+.badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--info-bg);
+  color: var(--info-ink);
+}
+
+/* ------------------------------------------------------------------ 배너 */
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+}
+
+.banner pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+}
+
+.banner-error {
+  background: var(--danger-bg);
+  color: var(--danger-ink);
+}
+
+.banner-info {
+  background: var(--info-bg);
+  color: var(--info-ink);
+}
+
+.banner button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------------ 본문 */
+
+.stage {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+}
+
+.pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  zoom: var(--zoom, 1);
+}
+
+/* 어두운 테마에서도 종이는 흰색. 인쇄 결과와 어긋나지 않게. */
+.page {
+  background: #ffffff;
+  color: #111111;
+  box-shadow: var(--shadow);
+  border-radius: 2px;
+  position: relative;
+}
+
+.section-badge {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 11px;
+  color: #9aa1ac;
+}
+
+.para {
+  margin: 0;
+  min-height: 1.4em;
+}
+
+.para [contenteditable]:empty::before {
+  content: attr(data-placeholder);
+  color: #b4b9c2;
+}
+
+.outline-1 {
+  font-size: 1.5em;
+  font-weight: 700;
+}
+
+.outline-2 {
+  font-size: 1.25em;
+  font-weight: 700;
+}
+
+.outline-3 {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- 슬라이드 */
+
+.deck {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.deck-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 212px;
+  flex-shrink: 0;
+  max-height: calc(100vh - 170px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.thumb {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  text-align: left;
+  background: var(--panel);
+  padding: 8px;
+  min-height: 44px;
+}
+
+/* 미리보기는 본 화면과 같은 경로로 그린다. 클릭만 받고 안쪽은 건드리지 않는다. */
+.thumb-canvas {
+  display: block;
+  pointer-events: none;
+  flex: 1;
+  min-width: 0;
+}
+
+.thumb-canvas .slide {
+  box-shadow: none;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+.thumb-active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.thumb-no {
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.thumb-add {
+  justify-content: center;
+  color: var(--ink-muted);
+  border-style: dashed;
+}
+
+.deck-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.slide {
+  position: relative;
+  color: #111111;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.slide-shape {
+  overflow: hidden;
+}
+
+.shape-text {
+  width: 100%;
+  height: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 글자가 있는 도형만 편집 대상이라는 표시를 준다. 배경 도형까지 테두리가
+   생기면 화면이 지저분해진다. */
+.slide-shape-text:hover {
+  outline: 1px dashed rgba(31, 111, 235, 0.6);
+  outline-offset: 1px;
+}
+
+.slide-shape p {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.slide-image-missing {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: #8b93a1;
+  background: repeating-linear-gradient(45deg, #f3f4f6, #f3f4f6 6px, #e9ebef 6px, #e9ebef 12px);
+}
+
+.slide-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.slide-table td {
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  padding: 2px 4px;
+  vertical-align: middle;
+}
+
+.deck-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ------------------------------------------------------------------ 시작 */
+
+.welcome {
+  max-width: 760px;
+  margin: 40px auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 36px;
+  box-shadow: var(--shadow);
+}
+
+.welcome h1 {
+  margin: 0 0 10px;
+  font-size: 26px;
+  letter-spacing: -0.02em;
+}
+
+.lede {
+  margin: 0 0 24px;
+  color: var(--ink-muted);
+  font-size: 15px;
+}
+
+.welcome-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.facts {
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.facts li {
+  padding: 12px 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.facts strong {
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------------ 드롭 */
+
+.app-dragging {
+  outline: 2px dashed var(--accent);
+  outline-offset: -8px;
+}
+
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(31, 111, 235, 0.08);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent);
+  pointer-events: none;
+}
+
+@media (max-width: 720px) {
+  .stage {
+    padding: 12px;
+  }
+
+  .deck {
+    flex-direction: column;
+  }
+
+  .deck-rail {
+    flex-direction: row;
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .thumb {
+    min-width: 160px;
+  }
+}
+
+/* ------------------------------------------------------------- 서식 도구막대 */
+
+.formatbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 12px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.formatbar button {
+  min-width: 32px;
+  padding: 4px 8px;
+}
+
+button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.size-select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 5px 6px;
+}
+
+.swatches {
+  display: flex;
+  gap: 3px;
+}
+
+.swatch {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+/* 정렬 버튼은 선 세 개로 모양을 만든다. 아이콘 폰트를 쓰지 않기 위함. */
+.align {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  justify-content: center;
+  padding: 6px 8px;
+}
+
+.align span {
+  display: block;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+  width: 14px;
+}
+
+.align span:nth-child(2) {
+  width: 9px;
+}
+
+.align-center {
+  align-items: center;
+}
+
+.align-right {
+  align-items: flex-end;
+}
+
+.align-justify span:nth-child(2) {
+  width: 14px;
+}
+
+/* ------------------------------------------------------------------- 표 */
+
+.doc-table {
+  border-collapse: collapse;
+  margin: 6px 0;
+  table-layout: fixed;
+  max-width: 100%;
+}
+
+.doc-table td {
+  border: 1px solid #333333;
+  padding: 3px 6px;
+  vertical-align: middle;
+  word-break: break-word;
+}
+
+.doc-table-active {
+  outline: 2px solid rgba(31, 111, 235, 0.35);
+  outline-offset: 2px;
+}
+
+.doc-table .cell-focused {
+  background: rgba(31, 111, 235, 0.08);
+}
+
+.doc-table .para {
+  margin: 0;
+}
+
+.para-focused {
+  /* 커서가 어느 문단에 있는지 은은하게만 알린다. 종이 느낌을 해치지 않도록. */
+  box-shadow: -6px 0 0 -4px var(--accent);
+}
+
+/* --------------------------------------------------------------- 겹침 창 */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 16, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 50;
+}
+
+.sheet {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  width: min(900px, 100%);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  padding: 20px 24px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sheet-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.sheet-head p {
+  margin: 0;
+  grid-column: 1;
+  font-size: 13px;
+}
+
+.sheet-head button {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: start;
+}
+
+.sheet-body {
+  overflow: auto;
+  padding: 8px 24px 24px;
+}
+
+.key-group {
+  margin-top: 18px;
+}
+
+.key-group h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.key-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.key-table th {
+  text-align: left;
+  font-weight: 500;
+  padding: 5px 12px 5px 0;
+  width: 180px;
+  vertical-align: top;
+}
+
+.key-table td {
+  padding: 5px 0;
+}
+
+.key-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 14px;
+}
+
+kbd {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--panel-2);
+  white-space: nowrap;
+}
+
+.key-origin {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.key-note {
+  font-size: 11px;
+  color: var(--ink-muted);
+  border-bottom: 1px dotted var(--ink-muted);
+  cursor: help;
+}
+
+.small {
+  font-size: 12px;
+}
+
+.menu-items hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 4px 2px;
+}
+
+.menu-items button:disabled {
+  opacity: 0.4;
+}
+
+.banner button {
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------- 표 UI */
+
+.menu-items-wide {
+  min-width: 300px;
+  padding: 10px;
+}
+
+.grid-picker-label {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin-bottom: 6px;
+  min-height: 18px;
+}
+
+.grid-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 22px);
+  gap: 2px;
+}
+
+.grid-cell {
+  width: 22px;
+  height: 20px;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--panel-2);
+}
+
+.grid-cell-on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.picker-note {
+  margin: 10px 2px 2px;
+}
+
+.tabletoolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 12px;
+  background: var(--info-bg);
+  color: var(--info-ink);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.tabletoolbar-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.tabletoolbar button {
+  padding: 4px 9px;
+  font-size: 13px;
+}
+
+.swatch-none {
+  background:
+    linear-gradient(to top right, transparent 46%, #d04437 46%, #d04437 54%, transparent 54%),
+    var(--panel);
+}
+
+/* 선택한 칸. 색을 칠한 셀 위에서도 보이도록 테두리로 표시한다. */
+.doc-table .cell-selected {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.doc-table td {
+  position: relative;
+}
+
+/* 슬라이드 글상자의 "고치기" 단추. 평소엔 숨어 있다가 올리면 나온다. */
+.shape-edit-hint {
+  /* 글을 복사할 때 단추 글자가 딸려 가지 않게 한다. */
+  user-select: none;
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+
+.slide-shape-text:hover .shape-edit-hint {
+  opacity: 0.95;
+  pointer-events: auto;
+}

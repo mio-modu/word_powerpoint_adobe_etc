@@ -65,6 +65,14 @@ export interface XmlDeclaration {
   version: string;
   encoding?: string;
   standalone?: string;
+  /**
+   * 원본 선언부를 통째로 보관한다.
+   *
+   * 한글은 `<?xml ... standalone="yes" ?>` 처럼 `?>` 앞에 공백을 넣는다.
+   * 의미는 같지만, 손대지 않고 저장했을 때 바이트까지 똑같아야 "아무것도
+   * 건드리지 않았다"를 증명할 수 있다. 그래서 원문을 그대로 돌려준다.
+   */
+  raw?: string;
 }
 
 export interface XmlDocument {
