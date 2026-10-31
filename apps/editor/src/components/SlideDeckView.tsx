@@ -41,15 +41,19 @@ export interface SlideDeckViewProps {
   onToggleNotes: () => void;
   /** 이 장부터 발표 시작. */
   onPresent: (fromIndex: number) => void;
+  /** 1 이면 화면에 꽉 맞춘 크기. 그보다 크면 넘치는 만큼 굴려 본다. */
+  zoom: number;
 }
 
 /** 남은 자리를 다 써도 이보다는 작게 그리지 않는다. */
 const SLIDE_MIN_WIDTH_PX = 320;
 /** 넓은 화면에서 끝없이 커지지 않게. */
-const SLIDE_MAX_WIDTH_PX = 1280;
+const SLIDE_MAX_WIDTH_PX = 1600;
 
 /** 메모판 기본 높이. 파워포인트의 메모 칸과 비슷한 정도. */
-const NOTES_DEFAULT_PX = 140;
+// 기본값은 장표 쪽에 넉넉히 준다. 메모를 많이 쓸 때는 경계선을 끌면 되고,
+// 그 높이는 기억된다. 반대로 기본을 크게 잡으면 장표가 작은 채로 남는다.
+const NOTES_DEFAULT_PX = 112;
 // 머리글 줄(약 34px)이 이 높이 안에 함께 들어간다. 64 로 잡았더니 글 칸에
 // 23px 밖에 안 남아 한 줄도 못 보는 쪽지가 됐다. 글 칸에 두세 줄은 남긴다.
 // 더 줄이고 싶으면 '메모판 접기'가 있다.
@@ -381,6 +385,7 @@ export function SlideDeckView({
   notesOpen,
   onToggleNotes,
   onPresent,
+  zoom,
 }: SlideDeckViewProps): JSX.Element {
   const index = Math.min(current, Math.max(deck.slides.length - 1, 0));
   const slide = deck.slides[index];
@@ -452,7 +457,7 @@ export function SlideDeckView({
     storeNotesHeight(effectiveNotesHeight);
   }, [effectiveNotesHeight]);
   const aspect = hwpunit.toPx(deck.slideSize.width) / hwpunit.toPx(deck.slideSize.height);
-  const slideWidth = Math.max(
+  const fittedWidth = Math.max(
     SLIDE_MIN_WIDTH_PX,
     Math.min(
       SLIDE_MAX_WIDTH_PX,
@@ -460,6 +465,8 @@ export function SlideDeckView({
       canvasBox.width > 0 ? Math.min(canvasBox.width, canvasBox.height * aspect) : 960,
     ),
   );
+  // 맞춤 크기에 확대 배율을 곱한다. 1 이면 화면에 꽉 맞는 크기다.
+  const slideWidth = Math.round(fittedWidth * zoom);
 
   return (
     <div className="deck">
@@ -500,7 +507,11 @@ export function SlideDeckView({
       <div className="deck-stage" ref={stageRef}>
         {slide ? (
           <>
-            <div className="deck-canvas" ref={canvasRef}>
+            <div
+              className="deck-canvas"
+              ref={canvasRef}
+              style={{ overflow: zoom > 1 ? 'auto' : 'hidden' }}
+            >
               <SlideCanvas
                 slide={slide}
                 deck={deck}
@@ -512,24 +523,6 @@ export function SlideDeckView({
                 onShapeChange={onShapeChange}
                 slideIndex={index}
               />
-            </div>
-            <div className="deck-actions" style={{ width: `${slideWidth}px` }}>
-              <span className="muted">
-                {index + 1} / {deck.slides.length}
-              </span>
-              <button
-                type="button"
-                className="ghost"
-                onClick={() => onPresent(index)}
-                title="이 장부터 발표 (Shift+F5). 처음부터는 F5."
-              >
-                ▶ 발표 시작
-              </button>
-              {!readOnly && deck.slides.length > 1 && (
-                <button type="button" className="ghost" onClick={() => onRemoveSlide(index)}>
-                  이 슬라이드 삭제
-                </button>
-              )}
             </div>
             {notesOpen && (
               <div
@@ -546,13 +539,13 @@ export function SlideDeckView({
                 onPointerCancel={endDrag}
                 onDoubleClick={() => setNotesHeight(clampNotes(NOTES_DEFAULT_PX))}
                 onKeyDown={onSplitterKey}
-                style={{ width: `${slideWidth}px` }}
+                style={{ width: `${Math.round(fittedWidth)}px` }}
               >
                 <span className="notes-splitter-grip" />
               </div>
             )}
             <NotesPane
-              width={slideWidth}
+              width={Math.round(fittedWidth)}
               height={effectiveNotesHeight}
               slideIndex={index}
               value={slide.notes}

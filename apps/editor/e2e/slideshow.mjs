@@ -351,6 +351,28 @@ const reset = await measure();
 check('두 번 누르면 기본 높이로 돌아온다', reset.notes > smaller.notes, `${smaller.notes} → ${reset.notes}`);
 await page.screenshot({ path: `${outDir}/notes-splitter.png` });
 
+console.log('\n[확대 조절]');
+const zoomSize = () =>
+  page.evaluate(() => {
+    const sl = document.querySelector('.deck-canvas .slide')?.getBoundingClientRect();
+    return { w: sl ? Math.round(sl.width) : 0, label: document.querySelector('.zoom-value')?.textContent };
+  });
+const fit = await zoomSize();
+check('기본은 화면 맞춤이다', fit.label === '맞춤', String(fit.label));
+await page.getByTitle('슬라이드 키우기 (Ctrl+=)').click();
+await page.waitForTimeout(350);
+const zoomed = await zoomSize();
+check('＋ 를 누르면 커진다', zoomed.w > fit.w, `${fit.w} → ${zoomed.w}px`);
+await page.getByTitle('화면에 맞추기 (Ctrl+0)').click();
+await page.waitForTimeout(350);
+const back = await zoomSize();
+check('맞춤을 누르면 되돌아온다', Math.abs(back.w - fit.w) <= 2, `${zoomed.w} → ${back.w}px`);
+
+console.log('\n[장 번호와 삭제는 위 도구막대에]');
+check('장 번호가 도구막대에 있다', (await page.locator('.slide-counter').count()) === 1,
+  (await page.textContent('.slide-counter')) ?? '');
+check('슬라이드 아래 도구 줄은 없앴다', (await page.locator('.deck-actions').count()) === 0);
+
 await browser.close();
 
 if (problems.length > 0) {

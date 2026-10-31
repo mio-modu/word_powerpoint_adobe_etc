@@ -14,6 +14,11 @@ export interface ToolbarProps {
   onInstall: () => void;
   /** 슬라이드일 때만 쓰인다. 처음부터 발표. */
   onPresent: () => void;
+  /** 슬라이드 쪽 상태. 장표 아래 줄을 없애고 이리로 올렸다 —
+   *  그 줄이 세로를 먹어 장표가 그만큼 작아졌다. */
+  slideIndex: number;
+  slideCount: number;
+  onRemoveSlide: (index: number) => void;
 }
 
 export function Toolbar({
@@ -25,6 +30,9 @@ export function Toolbar({
   canInstall,
   onInstall,
   onPresent,
+  slideIndex,
+  slideCount,
+  onRemoveSlide,
 }: ToolbarProps): JSX.Element {
   const { state } = session;
   const isDeck = state?.kind === 'pptx';
@@ -103,6 +111,19 @@ export function Toolbar({
               >
                 ▶ 발표
               </button>
+              <span className="slide-counter muted">
+                {slideIndex + 1} / {slideCount}
+              </span>
+              {!state.readOnly && slideCount > 1 && (
+                <button
+                  type="button"
+                  className="ghost"
+                  title="지금 보고 있는 슬라이드를 지웁니다"
+                  onClick={() => onRemoveSlide(slideIndex)}
+                >
+                  슬라이드 삭제
+                </button>
+              )}
             </div>
           )}
 
@@ -143,17 +164,32 @@ export function Toolbar({
             </Menu>
           )}
 
-          {!isDeck && (
-            <div className="toolbar-group zoom">
-              <button type="button" onClick={() => onZoomChange(Math.max(0.5, zoom - 0.1))}>
-                －
-              </button>
-              <span>{Math.round(zoom * 100)}%</span>
-              <button type="button" onClick={() => onZoomChange(Math.min(2, zoom + 0.1))}>
-                ＋
-              </button>
-            </div>
-          )}
+          <div className="toolbar-group zoom">
+            <button
+              type="button"
+              title={isDeck ? '슬라이드 줄이기 (Ctrl+-)' : '축소 (Ctrl+-)'}
+              onClick={() => onZoomChange(Math.max(0.5, zoom - 0.1))}
+            >
+              －
+            </button>
+            {/* 슬라이드에서 100% 는 "화면에 꽉 맞춘 크기"다. 눌러서 되돌릴 수
+                있어야 확대해 놓고 길을 잃지 않는다. */}
+            <button
+              type="button"
+              className="zoom-value"
+              title={isDeck ? '화면에 맞추기 (Ctrl+0)' : '100% 로 (Ctrl+0)'}
+              onClick={() => onZoomChange(1)}
+            >
+              {isDeck && zoom === 1 ? '맞춤' : `${Math.round(zoom * 100)}%`}
+            </button>
+            <button
+              type="button"
+              title={isDeck ? '슬라이드 키우기 (Ctrl+=)' : '확대 (Ctrl+=)'}
+              onClick={() => onZoomChange(Math.min(2, zoom + 0.1))}
+            >
+              ＋
+            </button>
+          </div>
 
           <div className="toolbar-file">
             <span className="filename">{state.name}</span>

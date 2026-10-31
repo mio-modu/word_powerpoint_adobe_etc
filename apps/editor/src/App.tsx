@@ -273,6 +273,9 @@ export function App(): JSX.Element {
         canInstall={installPrompt.canInstall}
         onInstall={installPrompt.install}
         onPresent={() => setPresentFrom(0)}
+        slideIndex={slideIndex}
+        slideCount={presentation?.slides.length ?? 0}
+        onRemoveSlide={session.removeSlide}
       />
 
       {state && !state.readOnly && (
@@ -320,6 +323,7 @@ export function App(): JSX.Element {
             notesOpen={notesOpen}
             onToggleNotes={() => setNotesOpen((open) => !open)}
             onPresent={setPresentFrom}
+            zoom={zoom}
           />
         )}
 
