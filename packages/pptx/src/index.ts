@@ -4,3 +4,4 @@ export { PptxFile, PptxError } from './document.js';
 export type { BlankPptxOptions } from './document.js';
 export * from './theme.js';
 export * from './slide.js';
+export * from './notes.js';

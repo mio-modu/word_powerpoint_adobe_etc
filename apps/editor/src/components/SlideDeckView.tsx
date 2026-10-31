@@ -6,8 +6,11 @@ import {
   type JamoTable,
   type XmlElement,
 } from '@jamo/core';
-import { useState, type CSSProperties } from 'react';
+import { type CSSProperties, useState } from 'react';
 import { Editable } from './Editable.js';
+import { NotesPane } from './NotesPane.js';
+import { useElementSize } from '../lib/useElementSize.js';
+import { useDragSize } from '../lib/useDragSize.js';
 import { charCss } from './TextDocumentView.js';
 
 /**
@@ -30,10 +33,57 @@ export interface SlideDeckViewProps {
   onRemoveSlide: (index: number) => void;
   /** 그림 파트를 화면용 주소로. */
   imageUrl: (part: string) => string | undefined;
+  /** 지금 보고 있는 장. 발표 모드와 같은 값을 써야 해서 바깥이 들고 있다. */
+  current: number;
+  onCurrentChange: (index: number) => void;
+  /** 발표자 메모를 엔진에 반영한다. */
+  onNotesCommit: (slideIndex: number, text: string) => void;
+  notesOpen: boolean;
+  onToggleNotes: () => void;
+  /** 이 장부터 발표 시작. */
+  onPresent: (fromIndex: number) => void;
+  /** 1 이면 맞춤 크기. 그보다 크면 넘치는 만큼 굴려 본다. */
+  zoom: number;
+  /**
+   * 'width' — 좌우 폭에 맞춘다. 메모판을 끌어도 **폭이 그대로**이고
+   *   세로만 보이는 만큼 달라진다. 파워포인트의 기본 느낌이다.
+   * 'screen' — 장표 전체가 한눈에 들어오게 맞춘다.
+   */
+  fit: 'width' | 'screen';
 }
 
-const SLIDE_WIDTH_PX = 960;
-const THUMB_WIDTH_PX = 172;
+/** 남은 자리를 다 써도 이보다는 작게 그리지 않는다. */
+const SLIDE_MIN_WIDTH_PX = 320;
+/** 넓은 화면에서 끝없이 커지지 않게. */
+const SLIDE_MAX_WIDTH_PX = 2000;
+
+/**
+ * 메모판 기본 높이.
+ *
+ * 장표 쪽에 넉넉히 준다. 메모를 많이 쓸 때는 경계선을 끌면 되고 그 높이는
+ * 기억된다. 반대로 기본을 크게 잡으면 장표가 작은 채로 남는다.
+ */
+const NOTES_DEFAULT_PX = 94;
+/**
+ * 머리글 줄(약 37px)이 이 높이 안에 함께 들어간다. 64 로 잡았더니 글 칸에
+ * 23px 밖에 안 남아 한 줄도 못 보는 쪽지가 됐다. 글 칸에 두 줄(약 50px)은
+ * 남는 값으로 잡는다. 더 줄이고 싶으면 '메모판 접기'가 있다.
+ */
+const NOTES_MIN_PX = 88;
+/** 메모판을 아무리 키워도 슬라이드에 이만큼은 남긴다. */
+const SLIDE_KEEP_PX = 200;
+
+/** 슬라이드 목록 폭. 끌어서 바꾸면 그만큼 장표 자리가 줄고 늘어난다. */
+const RAIL_DEFAULT_PX = 212;
+const RAIL_MIN_PX = 116;
+/** 목록을 아무리 넓혀도 장표에 이만큼은 남긴다. */
+const STAGE_KEEP_PX = 360;
+
+const NOTES_HEIGHT_KEY = 'jamo.notesHeight';
+const RAIL_WIDTH_KEY = 'jamo.railWidth';
+
+/** 번호 칸과 안팎 여백이 차지하는 몫. 목록 폭에서 이만큼 뺀 게 미리보기다. */
+const THUMB_CHROME_PX = 44;
 const FALLBACK_FONTS = `'Noto Sans KR', 'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', sans-serif`;
 
 function fillCss(fill: JamoFill | undefined): CSSProperties {
@@ -273,7 +323,7 @@ function SlideTable({ table, scale }: { table: JamoTable; scale: number }): JSX.
   );
 }
 
-function SlideCanvas({
+export function SlideCanvas({
   slide,
   deck,
   width,
@@ -332,29 +382,89 @@ export function SlideDeckView({
   onAddSlide,
   onRemoveSlide,
   imageUrl,
+  current,
+  onCurrentChange,
+  onNotesCommit,
+  notesOpen,
+  onToggleNotes,
+  onPresent,
+  zoom,
+  fit,
 }: SlideDeckViewProps): JSX.Element {
-  const [current, setCurrent] = useState(0);
   const index = Math.min(current, Math.max(deck.slides.length - 1, 0));
   const slide = deck.slides[index];
 
+  // 자리를 재서 그 안에 맞춘다. 고정 폭으로 그리면 노트북 화면에서
+  // 메모판이 화면 밖으로 밀려 "없는 것"이 된다.
+  const [canvasRef, canvasBox] = useElementSize<HTMLDivElement>();
+  const [stageRef, stageBox] = useElementSize<HTMLDivElement>();
+  const [deckRef, deckBox] = useElementSize<HTMLDivElement>();
+
+  // 메모판 높이 — 위로 끌면 커진다.
+  const notes = useDragSize({
+    storageKey: NOTES_HEIGHT_KEY,
+    defaultValue: NOTES_DEFAULT_PX,
+    min: NOTES_MIN_PX,
+    max: (stageBox.height > 0 ? stageBox.height : 600) - SLIDE_KEEP_PX,
+    axis: 'y',
+    reverse: true,
+  });
+
+  // 슬라이드 목록 폭 — 오른쪽으로 끌면 넓어지고 그만큼 장표 자리가 줄어든다.
+  const rail = useDragSize({
+    storageKey: RAIL_WIDTH_KEY,
+    defaultValue: RAIL_DEFAULT_PX,
+    min: RAIL_MIN_PX,
+    max: (deckBox.width > 0 ? deckBox.width : 1200) - STAGE_KEEP_PX,
+    axis: 'x',
+    step: 16,
+  });
+
+  const thumbWidth = Math.max(72, rail.size - THUMB_CHROME_PX);
+
+  const aspect = hwpunit.toPx(deck.slideSize.width) / hwpunit.toPx(deck.slideSize.height);
+
+  // 폭 맞춤에서는 **세로를 보지 않는다**. 그래야 메모판을 끌어 높이가
+  // 달라져도 장표 폭이 그대로다. 높이까지 함께 보면 메모판을 조금 끌 때마다
+  // 장표가 가로세로로 같이 줄었다 늘었다 해서 화면이 출렁인다.
+  //
+  // 대신 장표가 세로로 넘칠 수 있으므로 그 자리를 굴려 볼 수 있게 한다.
+  // 전체를 한눈에 보고 싶으면 '화면 맞춤' 으로 바꾸면 된다.
+  const available = canvasBox.width > 0 ? canvasBox.width : 960;
+  const base =
+    fit === 'width'
+      ? available
+      : Math.min(available, (canvasBox.height > 0 ? canvasBox.height : 540) * aspect);
+
+  const fittedWidth = Math.max(SLIDE_MIN_WIDTH_PX, Math.min(SLIDE_MAX_WIDTH_PX, base));
+  const slideWidth = Math.round(fittedWidth * zoom);
+  const slideHeight = slideWidth / aspect;
+
+  // 넘칠 때만 굴림막대를 쓴다. 딱 맞을 때 켜 두면 반올림 때문에
+  // 막대가 생겼다 사라졌다 하며 폭이 떨린다.
+  const overflows = slideHeight > canvasBox.height + 1 || slideWidth > canvasBox.width + 1;
+
   return (
-    <div className="deck">
-      <aside className="deck-rail">
+    <div className="deck" ref={deckRef}>
+      <aside className="deck-rail" style={{ width: `${Math.round(rail.size)}px` }}>
         {deck.slides.map((item, i) => (
           <button
             key={i}
             type="button"
             className={`thumb${i === index ? ' thumb-active' : ''}`}
-            onClick={() => setCurrent(i)}
+            onClick={() => onCurrentChange(i)}
           >
-            <span className="thumb-no">{i + 1}</span>
+            <span className="thumb-no">
+              {i + 1}
+              {item.notes && <span className="thumb-note-dot" title="메모 있음" />}
+            </span>
             {/* 작은 미리보기도 같은 그리기 경로를 쓴다. 본 화면과 다르게 보이면
                 어느 장인지 찾기 어렵다. */}
             <span className="thumb-canvas">
               <SlideCanvas
                 slide={item}
                 deck={deck}
-                width={THUMB_WIDTH_PX}
+                width={thumbWidth}
                 readOnly
                 interactive={false}
                 imageUrl={imageUrl}
@@ -370,30 +480,57 @@ export function SlideDeckView({
         )}
       </aside>
 
-      <div className="deck-stage">
+      {/* 목록과 장표 사이. 끌면 목록이 넓어지고 그만큼 장표 자리가 줄어든다. */}
+      <div
+        className="rail-splitter"
+        aria-label="슬라이드 목록 폭 조절 — 끌거나 좌우 화살표를 누르세요"
+        title="끌어서 목록 폭을 바꿉니다. 두 번 누르면 기본 폭으로."
+        {...rail.separatorProps}
+      >
+        <span className="rail-splitter-grip" />
+      </div>
+
+      <div className="deck-stage" ref={stageRef}>
         {slide ? (
           <>
-            <SlideCanvas
-              slide={slide}
-              deck={deck}
-              width={SLIDE_WIDTH_PX}
-              readOnly={readOnly}
-              interactive
-              imageUrl={imageUrl}
-              onShapeFocus={onShapeFocus}
-              onShapeChange={onShapeChange}
-              slideIndex={index}
-            />
-            <div className="deck-actions">
-              <span className="muted">
-                {index + 1} / {deck.slides.length}
-              </span>
-              {!readOnly && deck.slides.length > 1 && (
-                <button type="button" className="ghost" onClick={() => onRemoveSlide(index)}>
-                  이 슬라이드 삭제
-                </button>
-              )}
+            <div
+              className="deck-canvas"
+              ref={canvasRef}
+              style={{ overflow: overflows ? 'auto' : 'hidden' }}
+            >
+              <SlideCanvas
+                slide={slide}
+                deck={deck}
+                width={slideWidth}
+                readOnly={readOnly}
+                interactive
+                imageUrl={imageUrl}
+                onShapeFocus={onShapeFocus}
+                onShapeChange={onShapeChange}
+                slideIndex={index}
+              />
             </div>
+            {notesOpen && (
+              <div
+                className="notes-splitter"
+                aria-label="메모판 높이 조절 — 끌거나 위아래 화살표를 누르세요"
+                title="끌어서 메모판 높이를 바꿉니다. 두 번 누르면 기본 높이로."
+                style={{ width: `${Math.round(fittedWidth)}px` }}
+                {...notes.separatorProps}
+              >
+                <span className="notes-splitter-grip" />
+              </div>
+            )}
+            <NotesPane
+              width={Math.round(fittedWidth)}
+              height={notes.size}
+              slideIndex={index}
+              value={slide.notes}
+              readOnly={readOnly}
+              open={notesOpen}
+              onToggle={onToggleNotes}
+              onCommit={onNotesCommit}
+            />
           </>
         ) : (
           <p className="muted">슬라이드가 없습니다.</p>

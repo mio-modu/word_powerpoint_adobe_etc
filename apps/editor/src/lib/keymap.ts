@@ -47,6 +47,9 @@ export type CommandId =
   | 'mergeCells'
   | 'splitCell'
   | 'addSlide'
+  | 'present'
+  | 'presentHere'
+  | 'toggleNotes'
   | 'zoomIn'
   | 'zoomOut'
   | 'zoomReset'
@@ -112,6 +115,9 @@ export const COMMANDS: CommandInfo[] = [
   { id: 'deleteTable', label: '표 지우기', group: '표', textOnly: true },
 
   { id: 'addSlide', label: '슬라이드 추가', group: '슬라이드', slidesOnly: true },
+  { id: 'present', label: '처음부터 발표', group: '슬라이드', slidesOnly: true },
+  { id: 'presentHere', label: '현재 장부터 발표', group: '슬라이드', slidesOnly: true },
+  { id: 'toggleNotes', label: '메모판 펼치기/접기', group: '슬라이드', slidesOnly: true },
 
   { id: 'zoomIn', label: '확대', group: '보기' },
   { id: 'zoomOut', label: '축소', group: '보기' },
@@ -162,6 +168,9 @@ export const BINDINGS: KeyBinding[] = [
   { command: 'splitCell', key: 'ctrl+alt+shift+m', origin: '자모' },
 
   { command: 'addSlide', key: 'ctrl+m', origin: '파워포인트' },
+  { command: 'present', key: 'f5', origin: '파워포인트' },
+  { command: 'presentHere', key: 'shift+f5', origin: '파워포인트' },
+  { command: 'toggleNotes', key: 'ctrl+alt+n', origin: '자모' },
 
   { command: 'zoomIn', key: 'ctrl+=', origin: '공통' },
   { command: 'zoomOut', key: 'ctrl+-', origin: '공통' },
@@ -174,12 +183,44 @@ export const BINDINGS: KeyBinding[] = [
  * 브라우저가 가로채 쓸 수 없는 조합. 도움말에서 솔직히 알린다.
  * 데스크톱 앱으로 감싸면 전부 쓸 수 있게 된다.
  */
+/**
+ * 글을 치고 있을 때만 가져가는 키.
+ *
+ * Ctrl+R 은 새로고침, Ctrl+Shift+R 은 강력 새로고침이다. 한글·구글 문서의
+ * 오른쪽 정렬이기도 해서 양쪽 다 맞을 수가 없다. 그래서 **커서가 글 안에
+ * 있을 때만** 정렬로 쓰고, 그냥 보고 있을 때는 브라우저에 돌려준다.
+ *
+ * 새로고침을 아예 못 하게 막으면 새 판이 나와도 받을 방법이 없다 —
+ * 정렬 단축키 하나보다 그게 훨씬 나쁘다.
+ */
+const YIELD_WHEN_NOT_EDITING = new Set(['ctrl+r', 'ctrl+shift+r']);
+
+/** 지금 글을 치는 중인지. 글 상자나 메모판에 커서가 있으면 참. */
+export function editingText(): boolean {
+  if (typeof document === 'undefined') return false;
+  const el = document.activeElement;
+  if (!el || !(el instanceof HTMLElement)) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  return tag === 'TEXTAREA' || tag === 'INPUT';
+}
+
+/** 이 키를 브라우저에 돌려줘야 하는가. */
+export function yieldToBrowser(key: string): boolean {
+  return YIELD_WHEN_NOT_EDITING.has(key) && !editingText();
+}
+
 export const BROWSER_RESERVED: Array<{ key: string; what: string; hwp?: string }> = [
   { key: 'Ctrl+N', what: '새 창', hwp: '한글의 새 문서 / 표 만들기(Ctrl+N,T) 앞자리' },
   { key: 'Ctrl+T', what: '새 탭' },
   { key: 'Ctrl+W', what: '탭 닫기', hwp: '한글의 문서 닫기' },
   { key: 'Ctrl+Shift+T', what: '닫은 탭 복원' },
   { key: 'Ctrl+Shift+N', what: '시크릿 창' },
+  {
+    key: 'Ctrl+R / Ctrl+Shift+R',
+    what: '새로고침 · 강력 새로고침',
+    hwp: '글을 치는 중에는 오른쪽 정렬로 쓰고, 그 밖에는 브라우저에 넘깁니다',
+  },
 ];
 
 const SPECIAL_KEYS: Record<string, string> = {

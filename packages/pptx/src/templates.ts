@@ -19,6 +19,7 @@ export const PART = {
   theme: 'ppt/theme/theme1.xml',
   slideMaster: 'ppt/slideMasters/slideMaster1.xml',
   slideLayout: 'ppt/slideLayouts/slideLayout1.xml',
+  notesMaster: 'ppt/notesMasters/notesMaster1.xml',
   presProps: 'ppt/presProps.xml',
   viewProps: 'ppt/viewProps.xml',
   tableStyles: 'ppt/tableStyles.xml',
@@ -28,6 +29,10 @@ export const PART = {
 
 export function slidePart(index: number): string {
   return `ppt/slides/slide${index}.xml`;
+}
+
+export function notesSlidePart(index: number): string {
+  return `ppt/notesSlides/notesSlide${index}.xml`;
 }
 
 const DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
@@ -155,4 +160,60 @@ export function viewPropsXml(): string {
 
 export function tableStylesXml(): string {
   return `${DECL}\n<a:tblStyleLst xmlns:a="${P_NS.a}" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>`;
+}
+
+// ------------------------------------------------------------------- 메모
+
+/**
+ * 노트 마스터.
+ *
+ * 메모가 하나도 없던 문서에 메모를 처음 달 때 함께 만든다. PowerPoint 는
+ * 슬라이드 노트 파트가 노트 마스터를 가리키기를 기대하고, 없으면 "복구가
+ * 필요한 파일"로 본다. `notesStyle` 의 수준은 9개를 다 적는다 — 실제 파일이
+ * 모두 그렇게 돼 있고, 모자랄 때 어떻게 되는지 확인할 방법이 없다.
+ */
+export function notesMasterXml(): string {
+  const levels = Array.from(
+    { length: 9 },
+    (_unused, i) =>
+      `<a:lvl${i + 1}pPr marL="${i * 457200}" algn="l" rtl="0"><a:defRPr sz="1200"/></a:lvl${i + 1}pPr>`,
+  ).join('');
+  return `${DECL}
+<p:notesMaster ${NS_PA}>\
+<p:cSld><p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg>${EMPTY_SP_TREE}</p:cSld>\
+<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" \
+accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>\
+<p:notesStyle>${levels}</p:notesStyle>\
+</p:notesMaster>`;
+}
+
+/**
+ * 슬라이드 하나짜리 빈 노트 파트.
+ *
+ * 도형 두 개가 필요하다. `sldImg` 는 노트 인쇄물 위쪽에 들어가는 슬라이드
+ * 그림 자리이고, `body` 가 실제로 글을 적는 자리다. 우리가 읽고 쓰는 건
+ * `body` 쪽이다.
+ */
+export function notesSlideXml(): string {
+  return `${DECL}
+<p:notes ${NS_PA}>\
+<p:cSld><p:spTree>\
+<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>\
+<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>\
+<a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>\
+<p:sp>\
+<p:nvSpPr><p:cNvPr id="2" name="슬라이드 이미지 개체 틀 1"/>\
+<p:cNvSpPr><a:spLocks noGrp="1" noRot="1" noChangeAspect="1"/></p:cNvSpPr>\
+<p:nvPr><p:ph type="sldImg"/></p:nvPr></p:nvSpPr>\
+<p:spPr/>\
+</p:sp>\
+<p:sp>\
+<p:nvSpPr><p:cNvPr id="3" name="슬라이드 노트 개체 틀 2"/>\
+<p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>\
+<p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr>\
+<p:spPr/>\
+<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="ko-KR"/></a:p></p:txBody>\
+</p:sp>\
+</p:spTree></p:cSld>\
+</p:notes>`;
 }

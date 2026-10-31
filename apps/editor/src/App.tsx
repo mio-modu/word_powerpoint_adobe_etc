@@ -2,11 +2,19 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { FormatBar } from './components/FormatBar.js';
 import { ShortcutHelp } from './components/ShortcutHelp.js';
 import { SlideDeckView } from './components/SlideDeckView.js';
+import { SlideShow } from './components/SlideShow.js';
 import { TextDocumentView } from './components/TextDocumentView.js';
 import { TableToolbar } from './components/TableToolbar.js';
 import { Toolbar } from './components/Toolbar.js';
 import { supportsFileSystemAccess } from './lib/fs.js';
-import { keyOf, matchBinding, type CommandId } from './lib/keymap.js';
+import { flushPendingEdit } from './lib/pendingEdit.js';
+import {
+  consumeLaunchFiles,
+  startupNewDocument,
+  useAppUpdate,
+  useInstallPrompt,
+} from './lib/pwa.js';
+import { keyOf, matchBinding, yieldToBrowser, type CommandId } from './lib/keymap.js';
 import { useSession } from './session.js';
 
 const ZOOM_STEP = 0.1;
@@ -18,9 +26,18 @@ export function App(): JSX.Element {
   const [zoom, setZoom] = useState(1);
   const [dragging, setDragging] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [slideIndex, setSlideIndex] = useState(0);
+  const [notesOpen, setNotesOpen] = useState(true);
+  // undefined 면 발표 중이 아니다. 숫자면 그 장부터 보여 준다.
+  const [presentFrom, setPresentFrom] = useState<number | undefined>(undefined);
+  // 기본은 좌우 폭 맞춤. 파워포인트를 쓰던 손에 그쪽이 익숙하고,
+  // 메모판을 끌어도 장표 폭이 흔들리지 않는다.
+  const [deckFit, setDeckFit] = useState<'width' | 'screen'>('width');
   const pendingKey = useRef<string | undefined>(undefined);
   const pendingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const fileSystemAccess = supportsFileSystemAccess();
+  const installPrompt = useInstallPrompt();
+  const appUpdate = useAppUpdate();
 
   const run = useCallback(
     (command: CommandId) => {
@@ -124,6 +141,15 @@ export function App(): JSX.Element {
         case 'addSlide':
           session.addSlide();
           break;
+        case 'present':
+          if (session.state?.kind === 'pptx') setPresentFrom(0);
+          break;
+        case 'presentHere':
+          if (session.state?.kind === 'pptx') setPresentFrom(slideIndex);
+          break;
+        case 'toggleNotes':
+          setNotesOpen((open) => !open);
+          break;
         case 'zoomIn':
           setZoom((z) => Math.min(z + ZOOM_STEP, ZOOM_MAX));
           break;
@@ -138,11 +164,29 @@ export function App(): JSX.Element {
           break;
       }
     },
-    [session],
+    [session, slideIndex],
   );
+
+  // 탐색기에서 .hwpx 를 더블클릭해 들어온 파일. 앱이 뜨자마자 걸어야
+  // 브라우저가 이미 넘긴 실행 정보를 놓치지 않는다.
+  const openRef = useRef(session.openFromData);
+  openRef.current = session.openFromData;
+  useEffect(() => {
+    consumeLaunchFiles((file) => openRef.current(file.name, file.data, file.handle));
+  }, []);
+
+  // 설치한 앱의 바로가기(`?new=pptx`)로 띄웠을 때.
+  const createRef = useRef(session.createNew);
+  createRef.current = session.createNew;
+  useEffect(() => {
+    const kind = startupNewDocument();
+    if (kind) createRef.current(kind);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
+      // 발표 중에는 발표 화면이 키를 전부 가져간다.
+      if (presentFrom !== undefined) return;
       if (event.key === 'Escape') {
         if (helpOpen) {
           event.preventDefault();
@@ -155,6 +199,14 @@ export function App(): JSX.Element {
       if (event.isComposing) return;
 
       const key = keyOf(event);
+
+      // 새로고침 키는 글을 치는 중이 아니면 브라우저에 돌려준다.
+      // 이걸 막으면 새 판이 나와도 받을 방법이 없다.
+      if (yieldToBrowser(key)) {
+        pendingKey.current = undefined;
+        return;
+      }
+
       const { command, pending } = matchBinding(key, pendingKey.current);
 
       if (pending) {
@@ -171,12 +223,15 @@ export function App(): JSX.Element {
       if (!command) return;
 
       event.preventDefault();
+      // 아직 엔진에 들어가지 않은 글자를 먼저 밀어 넣는다. 이게 없으면
+      // 글을 치다가 Ctrl+S 를 눌렀을 때 마지막 몇 글자가 빠진 채 저장된다.
+      flushPendingEdit();
       run(command);
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [helpOpen, run]);
+  }, [helpOpen, run, presentFrom]);
 
   // 저장하지 않은 변경이 있으면 떠날 때 물어본다.
   useEffect(() => {
@@ -220,6 +275,14 @@ export function App(): JSX.Element {
         onZoomChange={setZoom}
         fileSystemAccess={fileSystemAccess}
         onShowHelp={() => setHelpOpen(true)}
+        canInstall={installPrompt.canInstall}
+        onInstall={installPrompt.install}
+        onPresent={() => setPresentFrom(0)}
+        slideIndex={slideIndex}
+        slideCount={presentation?.slides.length ?? 0}
+        onRemoveSlide={session.removeSlide}
+        fit={deckFit}
+        onFitChange={setDeckFit}
       />
 
       {state && !state.readOnly && (
@@ -227,6 +290,17 @@ export function App(): JSX.Element {
       )}
 
       {state && !state.readOnly && <TableToolbar session={session} />}
+
+      {appUpdate.ready && (
+        <div className="banner banner-info">
+          <span>
+            새 판이 준비됐습니다. 저장하지 않은 내용이 있으면 먼저 저장한 뒤 새로 고치세요.
+          </span>
+          <button type="button" onClick={appUpdate.reload}>
+            새로 고치기
+          </button>
+        </div>
+      )}
 
       {session.error && (
         <div className="banner banner-error">
@@ -249,7 +323,7 @@ export function App(): JSX.Element {
         </div>
       )}
 
-      <main className="stage">
+      <main className={`stage${presentation ? ' stage-deck' : ''}`}>
         {!state && <WelcomeScreen onOpen={() => void session.open()} session={session} />}
 
         {state && presentation && (
@@ -261,6 +335,14 @@ export function App(): JSX.Element {
             onAddSlide={session.addSlide}
             onRemoveSlide={session.removeSlide}
             imageUrl={session.imageUrl}
+            current={slideIndex}
+            onCurrentChange={setSlideIndex}
+            onNotesCommit={session.setNotes}
+            notesOpen={notesOpen}
+            onToggleNotes={() => setNotesOpen((open) => !open)}
+            onPresent={setPresentFrom}
+            zoom={zoom}
+            fit={deckFit}
           />
         )}
 
@@ -278,6 +360,15 @@ export function App(): JSX.Element {
           />
         )}
       </main>
+
+      {presentFrom !== undefined && presentation && (
+        <SlideShow
+          deck={presentation}
+          from={presentFrom}
+          imageUrl={session.imageUrl}
+          onClose={() => setPresentFrom(undefined)}
+        />
+      )}
 
       {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
       {dragging && <div className="drop-overlay">여기에 놓으면 열립니다</div>}

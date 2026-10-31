@@ -1,10 +1,12 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   type CSSProperties,
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
+import { clearPendingEdit, registerPendingEdit } from '../lib/pendingEdit.js';
 
 /**
  * contentEditable 한 줄/여러 줄 편집기.
@@ -79,11 +81,25 @@ export function Editable({
     selection?.addRange(range);
   }, [autoFocus]);
 
-  const commit = (): void => {
+  // 글만 반영한다. 편집 상태는 그대로 둔다 — Ctrl+S 로 밀어 넣을 때
+  // 편집이 풀려 버리면 이어 쓸 수가 없다.
+  const commitText = (): void => {
     const el = ref.current;
     if (!el) return;
     const text = el.textContent ?? '';
     if (text !== value) onCommit(text);
+  };
+
+  // 최신 commitText 를 가리키는 고정 함수. 등록/해제가 엇갈리지 않게.
+  const latest = useRef(commitText);
+  latest.current = commitText;
+  const flush = useCallback(() => latest.current(), []);
+
+  useEffect(() => () => clearPendingEdit(flush), [flush]);
+
+  const commit = (): void => {
+    commitText();
+    clearPendingEdit(flush);
     onBlurCapture?.();
   };
 
@@ -93,6 +109,7 @@ export function Editable({
       const el = ref.current;
       const text = el?.textContent ?? '';
       if (text !== value) onCommit(text);
+      clearPendingEdit(flush);
       onSplit(text);
       return;
     }
@@ -116,7 +133,10 @@ export function Editable({
       spellCheck={false}
       data-placeholder={placeholder}
       data-cell={dataCell}
-      onFocus={onFocus}
+      onFocus={() => {
+        registerPendingEdit(flush);
+        onFocus?.();
+      }}
       onMouseDown={onMouseDown}
       onBlur={commit}
       onKeyDownCapture={onKeyDownCapture}

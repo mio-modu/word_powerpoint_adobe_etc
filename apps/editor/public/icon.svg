@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="자모 오피스">
+  <!--
+    작업표시줄에서는 32px 안팎으로 줄어든다. 글자를 넣으면 뭉개지므로
+    도형만 쓴다. 종이 한 장 위에 세 가지 형식을 뜻하는 띠 세 개.
+    마스커블 안전 영역(가운데 지름 80%)을 넘지 않게 배치했다.
+  -->
+  <rect width="512" height="512" rx="112" fill="#1e2749"/>
+  <g>
+    <rect x="150" y="116" width="212" height="280" rx="18" fill="#ffffff"/>
+    <rect x="186" y="164" width="140" height="18" rx="9" fill="#1e2749"/>
+    <rect x="186" y="208" width="140" height="14" rx="7" fill="#9aa3bf"/>
+    <rect x="186" y="244" width="104" height="14" rx="7" fill="#9aa3bf"/>
+    <rect x="186" y="298" width="40" height="54" rx="10" fill="#c8a24a"/>
+    <rect x="236" y="298" width="40" height="54" rx="10" fill="#4a7bc8"/>
+    <rect x="286" y="298" width="40" height="54" rx="10" fill="#c85a4a"/>
+  </g>
+</svg>

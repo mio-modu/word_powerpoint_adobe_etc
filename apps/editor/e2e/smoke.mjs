@@ -88,6 +88,9 @@ check('저장 파일을 내려받았다', true, download.suggestedFilename());
 
 console.log('\n[DOCX 열기와 편집]');
 await page.reload({ waitUntil: 'load' });
+// 새로고침 직후에는 React 가 아직 키 처리기를 걸기 전일 수 있다.
+// 도구막대가 뜨면 준비가 끝난 것이다.
+await page.waitForSelector('.toolbar', { state: 'visible', timeout: 15000 });
 await dropFile('sample.docx');
 const docxText = (await page.textContent('.pages')) ?? '';
 check('워드 본문이 보인다', docxText.includes('한글 본문입니다.'), docxText.slice(0, 60));
@@ -96,6 +99,9 @@ await page.screenshot({ path: `${outDir}/02-docx.png` });
 
 console.log('\n[PPTX 열기]');
 await page.reload({ waitUntil: 'load' });
+// 새로고침 직후에는 React 가 아직 키 처리기를 걸기 전일 수 있다.
+// 도구막대가 뜨면 준비가 끝난 것이다.
+await page.waitForSelector('.toolbar', { state: 'visible', timeout: 15000 });
 await dropFile('sample.pptx');
 await page.waitForSelector('.deck-stage .slide', { timeout: 5000 });
 const thumbs = await page.locator('.deck-rail .thumb:not(.thumb-add)').count();
@@ -109,6 +115,9 @@ await page.screenshot({ path: `${outDir}/03-pptx.png` });
 
 console.log('\n[슬라이드를 보이는 대로 그린다]');
 await page.reload({ waitUntil: 'load' });
+// 새로고침 직후에는 React 가 아직 키 처리기를 걸기 전일 수 있다.
+// 도구막대가 뜨면 준비가 끝난 것이다.
+await page.waitForSelector('.toolbar', { state: 'visible', timeout: 15000 });
 await dropFile('themed.pptx');
 await page.waitForSelector('.deck-stage .slide', { timeout: 8000 });
 await page.waitForTimeout(500);
@@ -134,12 +143,18 @@ await page.screenshot({ path: `${outDir}/06-themed.png` });
 
 console.log('\n[새 문서 만들기]');
 await page.reload({ waitUntil: 'load' });
+// 새로고침 직후에는 React 가 아직 키 처리기를 걸기 전일 수 있다.
+// 도구막대가 뜨면 준비가 끝난 것이다.
+await page.waitForSelector('.toolbar', { state: 'visible', timeout: 15000 });
 await page.getByRole('button', { name: '새 한글 문서' }).click();
 await page.waitForSelector('.page', { timeout: 5000 });
 check('빈 한글 문서가 열린다', (await page.locator('.page').count()) === 1);
 
 console.log('\n[구형 .hwp 는 읽기 전용임을 알린다]');
 await page.reload({ waitUntil: 'load' });
+// 새로고침 직후에는 React 가 아직 키 처리기를 걸기 전일 수 있다.
+// 도구막대가 뜨면 준비가 끝난 것이다.
+await page.waitForSelector('.toolbar', { state: 'visible', timeout: 15000 });
 await dropFile('sample-old.hwp');
 await page.waitForTimeout(500);
 const banner = (await page.textContent('.banner-info').catch(() => '')) ?? '';

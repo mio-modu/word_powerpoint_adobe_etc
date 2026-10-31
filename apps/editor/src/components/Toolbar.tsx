@@ -9,6 +9,19 @@ export interface ToolbarProps {
   onZoomChange: (zoom: number) => void;
   fileSystemAccess: boolean;
   onShowHelp: () => void;
+  /** 브라우저가 설치 가능하다고 알려 왔을 때만 참. 사파리는 늘 거짓이다. */
+  canInstall: boolean;
+  onInstall: () => void;
+  /** 슬라이드일 때만 쓰인다. 처음부터 발표. */
+  onPresent: () => void;
+  /** 슬라이드 쪽 상태. 장표 아래 줄을 없애고 이리로 올렸다 —
+   *  그 줄이 세로를 먹어 장표가 그만큼 작아졌다. */
+  slideIndex: number;
+  slideCount: number;
+  onRemoveSlide: (index: number) => void;
+  /** 슬라이드를 좌우 폭에 맞출지, 전체가 한눈에 들어오게 맞출지. */
+  fit: 'width' | 'screen';
+  onFitChange: (fit: 'width' | 'screen') => void;
 }
 
 export function Toolbar({
@@ -17,6 +30,14 @@ export function Toolbar({
   onZoomChange,
   fileSystemAccess,
   onShowHelp,
+  canInstall,
+  onInstall,
+  onPresent,
+  slideIndex,
+  slideCount,
+  onRemoveSlide,
+  fit,
+  onFitChange,
 }: ToolbarProps): JSX.Element {
   const { state } = session;
   const isDeck = state?.kind === 'pptx';
@@ -27,6 +48,9 @@ export function Toolbar({
       <div className="brand">
         <span className="brand-mark">자모</span>
         <span className="brand-sub">오피스</span>
+        <span className="brand-build" title="이 판을 만든 시각입니다. 고친 내용이 안 보이면 이 숫자부터 확인하세요.">
+          {__BUILD__}
+        </span>
       </div>
 
       <div className="toolbar-group">
@@ -82,6 +106,32 @@ export function Toolbar({
             </Menu>
           </div>
 
+          {isDeck && (
+            <div className="toolbar-group">
+              <button
+                type="button"
+                className="primary present-button"
+                title="처음부터 발표합니다 (F5). 발표 중 S 를 누르면 메모가 보입니다."
+                onClick={onPresent}
+              >
+                ▶ 발표
+              </button>
+              <span className="slide-counter muted">
+                {slideIndex + 1} / {slideCount}
+              </span>
+              {!state.readOnly && slideCount > 1 && (
+                <button
+                  type="button"
+                  className="ghost"
+                  title="지금 보고 있는 슬라이드를 지웁니다"
+                  onClick={() => onRemoveSlide(slideIndex)}
+                >
+                  슬라이드 삭제
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="toolbar-group">
             <button
               type="button"
@@ -119,17 +169,45 @@ export function Toolbar({
             </Menu>
           )}
 
-          {!isDeck && (
-            <div className="toolbar-group zoom">
-              <button type="button" onClick={() => onZoomChange(Math.max(0.5, zoom - 0.1))}>
-                －
-              </button>
-              <span>{Math.round(zoom * 100)}%</span>
-              <button type="button" onClick={() => onZoomChange(Math.min(2, zoom + 0.1))}>
-                ＋
-              </button>
-            </div>
-          )}
+          <div className="toolbar-group zoom">
+            <button
+              type="button"
+              title={isDeck ? '슬라이드 줄이기 (Ctrl+-)' : '축소 (Ctrl+-)'}
+              onClick={() => onZoomChange(Math.max(0.5, zoom - 0.1))}
+            >
+              －
+            </button>
+            {/* 슬라이드에서 100% 는 "화면에 꽉 맞춘 크기"다. 눌러서 되돌릴 수
+                있어야 확대해 놓고 길을 잃지 않는다. */}
+            <button
+              type="button"
+              className="zoom-value"
+              title={
+                isDeck
+                  ? zoom !== 1
+                    ? '맞춤 크기로 되돌리기 (Ctrl+0)'
+                    : fit === 'width'
+                      ? '지금은 좌우 폭에 맞춥니다. 눌러서 장표 전체가 한눈에 들어오게 바꿉니다.'
+                      : '지금은 장표 전체를 보여 줍니다. 눌러서 좌우 폭에 맞춥니다.'
+                  : '100% 로 (Ctrl+0)'
+              }
+              onClick={() => {
+                // 확대해 둔 상태면 먼저 맞춤으로 되돌린다. 그 다음부터
+                // 누르면 폭 맞춤 ↔ 화면 맞춤이 번갈아 바뀐다.
+                if (zoom !== 1) onZoomChange(1);
+                else if (isDeck) onFitChange(fit === 'width' ? 'screen' : 'width');
+              }}
+            >
+              {isDeck && zoom === 1 ? (fit === 'width' ? '폭 맞춤' : '화면 맞춤') : `${Math.round(zoom * 100)}%`}
+            </button>
+            <button
+              type="button"
+              title={isDeck ? '슬라이드 키우기 (Ctrl+=)' : '확대 (Ctrl+=)'}
+              onClick={() => onZoomChange(Math.min(2, zoom + 0.1))}
+            >
+              ＋
+            </button>
+          </div>
 
           <div className="toolbar-file">
             <span className="filename">{state.name}</span>
@@ -140,6 +218,16 @@ export function Toolbar({
           <button type="button" className="ghost" title="단축키 (F1)" onClick={onShowHelp}>
             단축키
           </button>
+          {canInstall && (
+            <button
+              type="button"
+              className="ghost install-button"
+              title="바탕화면에 설치해 전용 창으로 띄웁니다. 인터넷 없이도 열립니다."
+              onClick={onInstall}
+            >
+              앱 설치
+            </button>
+          )}
           <button type="button" className="ghost" onClick={session.close}>
             닫기
           </button>
@@ -147,9 +235,21 @@ export function Toolbar({
       )}
 
       {!state && (
-        <button type="button" className="ghost" style={{ marginLeft: 'auto' }} onClick={onShowHelp}>
-          단축키 (F1)
-        </button>
+        <div className="toolbar-tail">
+          {canInstall && (
+            <button
+              type="button"
+              className="ghost install-button"
+              title="바탕화면에 설치해 전용 창으로 띄웁니다. 인터넷 없이도 열립니다."
+              onClick={onInstall}
+            >
+              앱 설치
+            </button>
+          )}
+          <button type="button" className="ghost" onClick={onShowHelp}>
+            단축키 (F1)
+          </button>
+        </div>
       )}
 
       {!fileSystemAccess && (

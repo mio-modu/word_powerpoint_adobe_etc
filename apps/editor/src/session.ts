@@ -84,7 +84,7 @@ export interface SessionApi {
   setFocus: (focus: Focus) => void;
 
   open: () => Promise<void>;
-  openFromData: (name: string, data: Uint8Array) => void;
+  openFromData: (name: string, data: Uint8Array, handle?: FileSystemFileHandle) => void;
   createNew: (kind: 'hwpx' | 'docx' | 'pptx') => void;
   close: () => void;
   dismissError: () => void;
@@ -119,6 +119,7 @@ export interface SessionApi {
   setShapeText: (source: unknown, lines: string[]) => void;
   addSlide: () => void;
   removeSlide: (index: number) => void;
+  setNotes: (slideIndex: number, text: string) => void;
 
   convertForEditing: () => void;
   /** 슬라이드 그림의 화면용 주소. 파일 안 바이트를 Blob 으로 만들어 돌려준다. */
@@ -215,9 +216,11 @@ export function useSession(): SessionApi {
   );
 
   const openFromData = useCallback(
-    (name: string, data: Uint8Array) => {
+    (name: string, data: Uint8Array, handle?: FileSystemFileHandle) => {
       try {
-        adopt(openDocument(data), name, undefined, false);
+        // 핸들을 같이 받으면 Ctrl+S 가 그 파일에 그대로 덮어쓴다.
+        // 탐색기에서 더블클릭해 들어온 파일이 이 경우다.
+        adopt(openDocument(data), name, handle, false);
       } catch (cause) {
         setError((cause as Error).message);
       }
@@ -628,6 +631,30 @@ export function useSession(): SessionApi {
     [snapshot, touch],
   );
 
+  /**
+   * 발표자 메모를 적는다.
+   *
+   * 메모판이 타자를 모아서 보내므로(칸을 떠날 때·장을 옮길 때·잠깐 멈췄을 때)
+   * 여기까지 오는 횟수는 많지 않다. 그래서 다른 편집과 똑같이 전체를 다시
+   * 그린다 — 미리보기의 메모 표시와 발표자 보기가 같은 모델을 보고 있어서,
+   * 여기서 아끼면 그쪽이 옛날 값을 들고 있게 된다.
+   *
+   * 값이 그대로면 아무것도 하지 않는다. 그러지 않으면 장을 옮길 때마다
+   * 되돌리기 기록이 의미 없이 쌓인다.
+   */
+  const setNotes = useCallback(
+    (slideIndex: number, text: string) => {
+      const doc = docRef.current;
+      if (!doc || doc.kind !== 'pptx') return;
+      if (slideIndex < 0 || slideIndex >= doc.file.slideCount) return;
+      if (doc.file.notes(slideIndex) === (text === '' ? undefined : text)) return;
+      snapshot();
+      doc.file.setNotes(slideIndex, text);
+      touch();
+    },
+    [snapshot, touch],
+  );
+
   // ----------------------------------------------------------------- 뷰 모델
 
   const { textDocument, presentation } = useMemo(() => {
@@ -682,6 +709,7 @@ export function useSession(): SessionApi {
     setShapeText,
     addSlide,
     removeSlide,
+    setNotes,
     convertForEditing,
     imageUrl,
   };

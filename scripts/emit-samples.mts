@@ -61,3 +61,15 @@ write('sample.pptx', pptx.save());
 // 테마·배경·그림·표가 든 덱. 화면에 "보이는 대로" 나오는지 확인하는 데 쓴다.
 const { buildThemedDeck } = await import('../packages/pptx/test/fixtures/themed-deck.js');
 write('themed.pptx', buildThemedDeck());
+
+// 장이 많은 덱. 슬라이드 목록(왼쪽 칸)이 장 수에 눌려 찌그러지지 않는지
+// 보려면 실제로 화면보다 긴 목록이 있어야 한다.
+const many = PptxFile.fromOutline(
+  Array.from({ length: 30 }, (_unused, i) => ({
+    title: `${i + 1}장 제목`,
+    bullets: [`${i + 1}장 첫째 줄`, `${i + 1}장 둘째 줄`],
+  })),
+  { title: '장이 많은 덱', creator: '자모 오피스' },
+);
+many.setNotes(0, '첫 장 메모 — 목록에 메모 표시가 뜨는지 보는 용도.');
+write('many-slides.pptx', many.save());
