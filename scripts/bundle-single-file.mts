@@ -13,7 +13,7 @@
  *
  *   npx vite-node scripts/bundle-single-file.mts -- apps/editor/dist
  */
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const distDir = process.argv[2] ?? 'apps/editor/dist';
@@ -59,8 +59,25 @@ html = html
   .replace('</head>', `<style>\n${css}\n</style>\n</head>`)
   .replace('</body>', `<script>${loader}</script>\n</body>`);
 
-const out = join(distDir, 'jamo-office.html');
-writeFileSync(out, html);
-console.log(
-  `${out}  ${(Buffer.byteLength(html) / 1024).toFixed(0)} KB — 웹서버 없이 더블클릭으로 열립니다`,
-);
+// 판 번호를 파일 이름에 박는다.
+//
+// 같은 이름으로 계속 보내면 받는 쪽에 "jamo-office (1).html, (2).html" 이
+// 쌓이고, 결국 예전 파일을 더블클릭하게 된다. 실제로 그 일이 있었다.
+// 이름만 봐도 어느 게 최신인지 알 수 있어야 한다.
+const stampPath = join(distDir, 'build-stamp.txt');
+const stamp = existsSync(stampPath)
+  ? readFileSync(stampPath, 'utf8').trim().replace(/[.:]/g, '').replace(/^(\d{6})(\d+)$/, '$1-$2')
+  : '';
+
+const size = `${(Buffer.byteLength(html) / 1024).toFixed(0)} KB`;
+
+// 이름 없는 쪽도 함께 남긴다. 테스트와 문서가 이 경로를 가리킨다.
+const plain = join(distDir, 'jamo-office.html');
+writeFileSync(plain, html);
+console.log(`${plain}  ${size} — 웹서버 없이 더블클릭으로 열립니다`);
+
+if (stamp !== '') {
+  const stamped = join(distDir, `jamo-office-${stamp}.html`);
+  writeFileSync(stamped, html);
+  console.log(`${stamped}  ${size} — 받는 쪽에 보낼 파일 (이름에 판 번호)`);
+}

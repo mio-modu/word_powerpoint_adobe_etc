@@ -122,6 +122,8 @@ export function NotesPane({
           메모판 접기
         </button>
         <span className="notes-title">{slideIndex + 1}장 발표자 메모</span>
+        {/* 끌 수 있다는 걸 모르면 없는 기능이다. 선만 그려 두면 못 찾는다. */}
+        <span className="muted notes-hint">↕ 위 선을 끌면 메모판이 커집니다</span>
         <span className="muted notes-count">{lineCount > 0 ? `${lineCount}줄` : '비어 있음'}</span>
       </div>
       <textarea

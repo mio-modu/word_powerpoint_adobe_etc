@@ -108,6 +108,9 @@ check('미리 받아 둔 파일이 있다', cached.count >= 4, `${cached.count}�
 console.log('\n[인터넷을 끊고 열기]');
 await context.setOffline(true);
 await page.reload({ waitUntil: 'load' });
+// 새로고침 직후에는 React 가 아직 키 처리기를 걸기 전일 수 있다.
+// 도구막대가 뜨면 준비가 끝난 것이다.
+await page.waitForSelector('.toolbar', { state: 'visible', timeout: 15000 });
 await page.waitForTimeout(600);
 const offlineTitle = (await page.textContent('h1').catch(() => '')) ?? '';
 check('오프라인에서도 앱이 뜬다', offlineTitle.includes('브라우저에서'), offlineTitle.slice(0, 40));

@@ -170,6 +170,9 @@ await page.screenshot({ path: `${outDir}/10-table.png` });
 // ---------------------------------------------------------------- 도움말
 console.log('\n[단축키 도움말]');
 await page.reload({ waitUntil: 'load' });
+// 새로고침 직후에는 React 가 아직 키 처리기를 걸기 전일 수 있다.
+// 도구막대가 뜨면 준비가 끝난 것이다.
+await page.waitForSelector('.toolbar', { state: 'visible', timeout: 15000 });
 await page.keyboard.press('F1');
 await page.waitForTimeout(400);
 check('F1 로 단축키 목록이 열린다', await page.locator('.sheet').isVisible());

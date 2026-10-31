@@ -85,6 +85,9 @@ check('Ctrl+S 로 저장됐다', true, download.suggestedFilename());
 
 console.log('\n[저장한 파일 다시 열기]');
 await page.reload({ waitUntil: 'load' });
+// 새로고침 직후에는 React 가 아직 키 처리기를 걸기 전일 수 있다.
+// 도구막대가 뜨면 준비가 끝난 것이다.
+await page.waitForSelector('.toolbar', { state: 'visible', timeout: 15000 });
 await page.evaluate(() => {
   const el = document.querySelector('.app');
   if (!el) throw new Error('.app 이 없습니다');
@@ -231,6 +234,9 @@ console.log('\n[장이 많을 때 슬라이드 목록]');
 // 예전에 여기가 깨졌다: 목록이 세로 flex 라 장이 많아지면 칸이 min-height
 // 까지 찌그러지는데 안의 미리보기는 그대로라 아래 칸을 덮었다.
 await page.reload({ waitUntil: 'load' });
+// 새로고침 직후에는 React 가 아직 키 처리기를 걸기 전일 수 있다.
+// 도구막대가 뜨면 준비가 끝난 것이다.
+await page.waitForSelector('.toolbar', { state: 'visible', timeout: 15000 });
 await dropFile('many-slides.pptx');
 await page.waitForTimeout(600);
 const rail = await page.evaluate(() =>
@@ -295,6 +301,9 @@ for (const size of [
 console.log('\n[메모판 높이 조절]');
 // 파워포인트처럼 경계선을 끌어 메모판을 키우고 슬라이드를 줄인다.
 await page.reload({ waitUntil: 'load' });
+// 새로고침 직후에는 React 가 아직 키 처리기를 걸기 전일 수 있다.
+// 도구막대가 뜨면 준비가 끝난 것이다.
+await page.waitForSelector('.toolbar', { state: 'visible', timeout: 15000 });
 await dropFile('many-slides.pptx');
 await page.waitForTimeout(700);
 

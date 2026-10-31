@@ -22,7 +22,19 @@ const buildStamp = new Intl.DateTimeFormat('ko-KR', {
   .replace(/\s/g, '');
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      // 빌드 시각을 파일로도 남긴다. 단일 HTML 파일 이름에 이 값을 붙여야
+      // 받을 때마다 "jamo-office (1).html, (2)..." 로 쌓여 어느 게 최신인지
+      // 알 수 없게 되는 일이 없다. 번들 안의 값을 뒤져 꺼내는 것보다
+      // 여기서 내보내는 쪽이 확실하다.
+      name: 'jamo-build-stamp',
+      generateBundle() {
+        this.emitFile({ type: 'asset', fileName: 'build-stamp.txt', source: buildStamp });
+      },
+    },
+  ],
   base: './',
   define: {
     __BUILD__: JSON.stringify(buildStamp),

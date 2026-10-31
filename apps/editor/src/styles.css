@@ -923,6 +923,14 @@ kbd {
 .notes-count {
   margin-left: auto;
   font-size: 12px;
+  flex-shrink: 0;
+}
+
+.notes-hint {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .notes-toggle {
@@ -1173,8 +1181,8 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 10px;
-  margin-bottom: -4px;
+  height: 14px;
+  margin-bottom: -5px;
   flex-shrink: 0;
   cursor: row-resize;
   /* 끄는 동안 글자가 선택되면 파란 칠이 번진다. */
@@ -1183,16 +1191,21 @@ kbd {
 }
 
 .notes-splitter-grip {
-  width: 48px;
-  height: 3px;
+  width: 76px;
+  height: 5px;
   border-radius: 999px;
-  background: var(--line);
-  transition: background 0.12s ease;
+  /* 눈에 띄어야 끌어 볼 생각을 한다. 선이 너무 옅으면 없는 것과 같다. */
+  background: var(--ink-muted);
+  opacity: 0.45;
+  transition:
+    background 0.12s ease,
+    opacity 0.12s ease;
 }
 
 .notes-splitter:hover .notes-splitter-grip,
 .notes-splitter:focus-visible .notes-splitter-grip {
   background: var(--accent);
+  opacity: 1;
 }
 
 .notes-splitter:focus-visible {

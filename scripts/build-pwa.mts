@@ -19,6 +19,8 @@ const distDir = process.argv[2] ?? 'apps/editor/dist';
 
 /** 단일 HTML 파일(jamo-office.html)은 서비스 워커와 상관없으니 뺀다. */
 const SKIP = new Set(['sw.js', 'jamo-office.html']);
+/** 판 번호가 붙은 단일 HTML 파일(jamo-office-261031-2319.html)도 뺀다. */
+const SKIP_PATTERN = /^jamo-office-[\d-]+\.html$/;
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -31,7 +33,7 @@ function walk(dir: string, out: string[] = []): string[] {
 
 const files = walk(distDir)
   .map((full) => relative(distDir, full).split(sep).join('/'))
-  .filter((rel) => !SKIP.has(rel))
+  .filter((rel) => !SKIP.has(rel) && !SKIP_PATTERN.test(rel))
   .sort();
 
 if (!files.includes('index.html')) {
