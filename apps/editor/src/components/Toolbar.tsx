@@ -12,6 +12,8 @@ export interface ToolbarProps {
   /** 브라우저가 설치 가능하다고 알려 왔을 때만 참. 사파리는 늘 거짓이다. */
   canInstall: boolean;
   onInstall: () => void;
+  /** 슬라이드일 때만 쓰인다. 처음부터 발표. */
+  onPresent: () => void;
 }
 
 export function Toolbar({
@@ -22,6 +24,7 @@ export function Toolbar({
   onShowHelp,
   canInstall,
   onInstall,
+  onPresent,
 }: ToolbarProps): JSX.Element {
   const { state } = session;
   const isDeck = state?.kind === 'pptx';
@@ -32,6 +35,9 @@ export function Toolbar({
       <div className="brand">
         <span className="brand-mark">자모</span>
         <span className="brand-sub">오피스</span>
+        <span className="brand-build" title="이 판을 만든 시각입니다. 고친 내용이 안 보이면 이 숫자부터 확인하세요.">
+          {__BUILD__}
+        </span>
       </div>
 
       <div className="toolbar-group">
@@ -86,6 +92,19 @@ export function Toolbar({
               )}
             </Menu>
           </div>
+
+          {isDeck && (
+            <div className="toolbar-group">
+              <button
+                type="button"
+                className="primary present-button"
+                title="처음부터 발표합니다 (F5). 발표 중 S 를 누르면 메모가 보입니다."
+                onClick={onPresent}
+              >
+                ▶ 발표
+              </button>
+            </div>
+          )}
 
           <div className="toolbar-group">
             <button

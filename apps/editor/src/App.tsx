@@ -272,6 +272,7 @@ export function App(): JSX.Element {
         onShowHelp={() => setHelpOpen(true)}
         canInstall={installPrompt.canInstall}
         onInstall={installPrompt.install}
+        onPresent={() => setPresentFrom(0)}
       />
 
       {state && !state.readOnly && (

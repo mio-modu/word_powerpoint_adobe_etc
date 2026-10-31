@@ -1122,3 +1122,19 @@ kbd {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+.brand-build {
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.present-button {
+  font-weight: 600;
+}

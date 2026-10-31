@@ -4,9 +4,29 @@ import react from '@vitejs/plugin-react';
 const pkg = (name: string): string =>
   new URL(`../../packages/${name}/src/index.ts`, import.meta.url).pathname;
 
+// 빌드한 날짜·시각(한국 기준). 화면 왼쪽 위에 박아 둔다.
+//
+// 왜 필요한가: 파일 하나로 받아 쓰면 "지금 내가 여는 게 몇 번째 판인지"
+// 알 길이 없다. 고쳐 보냈는데 옛 파일을 계속 열면서 "안 고쳐졌다"고
+// 보게 되는 일이 실제로 있었다. 눈에 보여야 확인할 수 있다.
+const buildStamp = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  year: '2-digit',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
+  .format(new Date())
+  .replace(/\s/g, '');
+
 export default defineConfig({
   plugins: [react()],
   base: './',
+  define: {
+    __BUILD__: JSON.stringify(buildStamp),
+  },
   resolve: {
     alias: {
       '@jamo/core': pkg('core'),
