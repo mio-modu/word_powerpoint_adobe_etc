@@ -313,7 +313,11 @@ button.ghost {
 .deck {
   display: flex;
   gap: 20px;
-  align-items: flex-start;
+  align-items: stretch;
+  /* 화면 높이 안에 다 들어가게 한다. 넘치면 메모판이 아래로 밀려
+     "없는 것"이 되는데, 강의 중에 찾을 수 있는 자리가 아니다. */
+  height: 100%;
+  min-height: 0;
 }
 
 .deck-rail {
@@ -322,7 +326,9 @@ button.ghost {
   gap: 8px;
   width: 212px;
   flex-shrink: 0;
-  max-height: calc(100vh - 170px);
+  /* 부모가 화면 높이에 맞춰져 있으므로 100vh 를 따로 계산하지 않는다.
+     도구막대 줄 수가 바뀌어도 알아서 맞는다. */
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -375,7 +381,21 @@ button.ghost {
 .deck-stage {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 10px;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 슬라이드가 차지할 자리. 남는 높이를 전부 받아 그 안에 맞춰 그린다. */
+.deck-canvas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
 }
 
 .slide {
@@ -871,9 +891,8 @@ kbd {
 /* ------------------------------------------------------------- 메모판 */
 
 .notes-pane {
-  width: 960px;
   max-width: 100%;
-  margin-top: 12px;
+  flex-shrink: 0;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -939,8 +958,9 @@ kbd {
 .notes-input {
   display: block;
   width: 100%;
-  min-height: 96px;
-  max-height: 240px;
+  height: 110px;
+  min-height: 72px;
+  max-height: 40vh;
   padding: 10px 12px;
   font: inherit;
   font-size: 14px;
@@ -1137,4 +1157,9 @@ kbd {
 
 .present-button {
   font-weight: 600;
+}
+
+/* 슬라이드를 볼 때는 바깥 스크롤을 없앤다. 안에서 각자 맞춰 들어간다. */
+.stage-deck {
+  overflow: hidden;
 }

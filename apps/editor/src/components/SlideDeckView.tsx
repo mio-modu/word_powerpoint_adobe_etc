@@ -9,6 +9,7 @@ import {
 import { useState, type CSSProperties } from 'react';
 import { Editable } from './Editable.js';
 import { NotesPane } from './NotesPane.js';
+import { useElementSize } from '../lib/useElementSize.js';
 import { charCss } from './TextDocumentView.js';
 
 /**
@@ -42,7 +43,10 @@ export interface SlideDeckViewProps {
   onPresent: (fromIndex: number) => void;
 }
 
-const SLIDE_WIDTH_PX = 960;
+/** 남은 자리를 다 써도 이보다는 작게 그리지 않는다. */
+const SLIDE_MIN_WIDTH_PX = 320;
+/** 넓은 화면에서 끝없이 커지지 않게. */
+const SLIDE_MAX_WIDTH_PX = 1280;
 const THUMB_WIDTH_PX = 172;
 const FALLBACK_FONTS = `'Noto Sans KR', 'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', sans-serif`;
 
@@ -352,6 +356,19 @@ export function SlideDeckView({
   const index = Math.min(current, Math.max(deck.slides.length - 1, 0));
   const slide = deck.slides[index];
 
+  // 슬라이드가 들어갈 자리를 재서 그 안에 맞춘다. 고정 폭으로 그리면
+  // 노트북 화면에서 메모판이 화면 밖으로 밀려 "없는 것"이 된다.
+  const [canvasRef, canvasBox] = useElementSize<HTMLDivElement>();
+  const aspect = hwpunit.toPx(deck.slideSize.width) / hwpunit.toPx(deck.slideSize.height);
+  const slideWidth = Math.max(
+    SLIDE_MIN_WIDTH_PX,
+    Math.min(
+      SLIDE_MAX_WIDTH_PX,
+      // 아직 재기 전(0)에는 적당한 값으로 한 번 그린다.
+      canvasBox.width > 0 ? Math.min(canvasBox.width, canvasBox.height * aspect) : 960,
+    ),
+  );
+
   return (
     <div className="deck">
       <aside className="deck-rail">
@@ -391,18 +408,20 @@ export function SlideDeckView({
       <div className="deck-stage">
         {slide ? (
           <>
-            <SlideCanvas
-              slide={slide}
-              deck={deck}
-              width={SLIDE_WIDTH_PX}
-              readOnly={readOnly}
-              interactive
-              imageUrl={imageUrl}
-              onShapeFocus={onShapeFocus}
-              onShapeChange={onShapeChange}
-              slideIndex={index}
-            />
-            <div className="deck-actions">
+            <div className="deck-canvas" ref={canvasRef}>
+              <SlideCanvas
+                slide={slide}
+                deck={deck}
+                width={slideWidth}
+                readOnly={readOnly}
+                interactive
+                imageUrl={imageUrl}
+                onShapeFocus={onShapeFocus}
+                onShapeChange={onShapeChange}
+                slideIndex={index}
+              />
+            </div>
+            <div className="deck-actions" style={{ width: `${slideWidth}px` }}>
               <span className="muted">
                 {index + 1} / {deck.slides.length}
               </span>
@@ -421,6 +440,7 @@ export function SlideDeckView({
               )}
             </div>
             <NotesPane
+              width={slideWidth}
               slideIndex={index}
               value={slide.notes}
               readOnly={readOnly}

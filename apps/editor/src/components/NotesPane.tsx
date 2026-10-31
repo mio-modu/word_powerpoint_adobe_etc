@@ -17,6 +17,8 @@ import { clearPendingEdit, registerPendingEdit } from '../lib/pendingEdit.js';
 const IDLE_MS = 1200;
 
 export interface NotesPaneProps {
+  /** 슬라이드와 폭을 맞춘다. */
+  width: number;
   slideIndex: number;
   /** 엔진이 들고 있는 현재 메모. */
   value: string | undefined;
@@ -27,6 +29,7 @@ export interface NotesPaneProps {
 }
 
 export function NotesPane({
+  width,
   slideIndex,
   value,
   readOnly,
@@ -100,7 +103,7 @@ export function NotesPane({
 
   if (!open) {
     return (
-      <div className="notes-pane notes-pane-closed">
+      <div className="notes-pane notes-pane-closed" style={{ width: `${width}px` }}>
         <button type="button" className="notes-toggle" onClick={onToggle}>
           메모판 펼치기
           {draft.trim() !== '' && <span className="notes-dot" title="이 장에 메모가 있습니다" />}
@@ -110,7 +113,7 @@ export function NotesPane({
   }
 
   return (
-    <div className="notes-pane">
+    <div className="notes-pane" style={{ width: `${width}px` }}>
       <div className="notes-head">
         <button type="button" className="notes-toggle" onClick={onToggle}>
           메모판 접기

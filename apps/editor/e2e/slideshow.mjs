@@ -251,6 +251,47 @@ const sameHeight = new Set(rail.map((r) => r.height)).size === 1;
 check('칸 높이가 모두 같다', sameHeight, [...new Set(rail.map((r) => r.height))].join(', '));
 await page.screenshot({ path: `${outDir}/rail.png`, clip: { x: 0, y: 0, width: 420, height: 820 } });
 
+console.log('\n[좁은 화면에서도 메모판이 보이는가]');
+// 예전에 여기가 깨졌다: 슬라이드를 960px 고정으로 그려서 노트북 화면에서는
+// 메모판이 화면 밖으로 밀려 "없는 것"이 됐다. 강의 중에 찾을 자리가 아니다.
+for (const size of [
+  { name: '1280×720', width: 1280, height: 720 },
+  { name: '1366×768', width: 1366, height: 768 },
+]) {
+  const small = await context.newPage();
+  await small.setViewportSize({ width: size.width, height: size.height });
+  await small.goto(baseUrl, { waitUntil: 'load' });
+  const deckBytes = Array.from(readFileSync(`${samplesDir}/many-slides.pptx`));
+  await small.evaluate(
+    async ([data]) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([new Uint8Array(data)], 'many-slides.pptx'));
+      document
+        .querySelector('.app')
+        .dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    },
+    [deckBytes],
+  );
+  await small.waitForTimeout(1000);
+  const fit = await small.evaluate(() => {
+    const box = document.querySelector('.notes-input')?.getBoundingClientRect();
+    const slide = document.querySelector('.deck-canvas .slide')?.getBoundingClientRect();
+    return {
+      top: box ? Math.round(box.top) : null,
+      bottom: box ? Math.round(box.bottom) : null,
+      view: window.innerHeight,
+      slideWidth: slide ? Math.round(slide.width) : 0,
+    };
+  });
+  check(
+    `${size.name} 에서 메모판이 화면 안에 있다`,
+    fit.bottom !== null && fit.bottom <= fit.view && fit.top >= 0,
+    `메모판 ${fit.top}~${fit.bottom}px / 화면 ${fit.view}px`,
+  );
+  check(`${size.name} 에서 슬라이드가 너무 작지 않다`, fit.slideWidth >= 400, `${fit.slideWidth}px`);
+  await small.close();
+}
+
 await browser.close();
 
 if (problems.length > 0) {

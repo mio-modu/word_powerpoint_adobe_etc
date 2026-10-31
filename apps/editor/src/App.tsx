@@ -302,7 +302,7 @@ export function App(): JSX.Element {
         </div>
       )}
 
-      <main className="stage">
+      <main className={`stage${presentation ? ' stage-deck' : ''}`}>
         {!state && <WelcomeScreen onOpen={() => void session.open()} session={session} />}
 
         {state && presentation && (
