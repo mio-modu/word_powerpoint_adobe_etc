@@ -18,7 +18,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "dev": "npm run dev --workspace @jamo/editor",
-    "build:web": "npm run build --workspace @jamo/editor",
+    "build:web": "npm run build --workspace @jamo/editor && vite-node scripts/build-pwa.mts -- apps/editor/dist",
     "samples": "vite-node scripts/emit-samples.mts -- samples && vite-node scripts/emit-old-hwp.mts -- samples",
     "inspect": "vite-node scripts/inspect-cfb.mts --",
     "test:e2e": "node apps/editor/e2e/smoke.mjs",
@@ -27,7 +27,10 @@
     "test:e2e:file": "node apps/editor/e2e/single-file.mjs",
     "test:e2e:edit": "node apps/editor/e2e/editing.mjs",
     "verify:real": "vite-node scripts/verify-real-file.mts --",
-    "test:e2e:table": "node apps/editor/e2e/table-ui.mjs"
+    "test:e2e:table": "node apps/editor/e2e/table-ui.mjs",
+    "build:icons": "node scripts/make-icons.mjs",
+    "test:e2e:slides": "node apps/editor/e2e/slideshow.mjs",
+    "test:e2e:pwa": "node apps/editor/e2e/pwa.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

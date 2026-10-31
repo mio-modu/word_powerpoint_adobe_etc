@@ -9,6 +9,9 @@ export interface ToolbarProps {
   onZoomChange: (zoom: number) => void;
   fileSystemAccess: boolean;
   onShowHelp: () => void;
+  /** 브라우저가 설치 가능하다고 알려 왔을 때만 참. 사파리는 늘 거짓이다. */
+  canInstall: boolean;
+  onInstall: () => void;
 }
 
 export function Toolbar({
@@ -17,6 +20,8 @@ export function Toolbar({
   onZoomChange,
   fileSystemAccess,
   onShowHelp,
+  canInstall,
+  onInstall,
 }: ToolbarProps): JSX.Element {
   const { state } = session;
   const isDeck = state?.kind === 'pptx';
@@ -140,6 +145,16 @@ export function Toolbar({
           <button type="button" className="ghost" title="단축키 (F1)" onClick={onShowHelp}>
             단축키
           </button>
+          {canInstall && (
+            <button
+              type="button"
+              className="ghost install-button"
+              title="바탕화면에 설치해 전용 창으로 띄웁니다. 인터넷 없이도 열립니다."
+              onClick={onInstall}
+            >
+              앱 설치
+            </button>
+          )}
           <button type="button" className="ghost" onClick={session.close}>
             닫기
           </button>
@@ -147,9 +162,21 @@ export function Toolbar({
       )}
 
       {!state && (
-        <button type="button" className="ghost" style={{ marginLeft: 'auto' }} onClick={onShowHelp}>
-          단축키 (F1)
-        </button>
+        <div className="toolbar-tail">
+          {canInstall && (
+            <button
+              type="button"
+              className="ghost install-button"
+              title="바탕화면에 설치해 전용 창으로 띄웁니다. 인터넷 없이도 열립니다."
+              onClick={onInstall}
+            >
+              앱 설치
+            </button>
+          )}
+          <button type="button" className="ghost" onClick={onShowHelp}>
+            단축키 (F1)
+          </button>
+        </div>
       )}
 
       {!fileSystemAccess && (

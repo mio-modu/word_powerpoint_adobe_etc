@@ -1,0 +1,261 @@
+/**
+ * 발표 모드와 강의용 메모판 종단 확인.
+ *
+ * 여기서만 잡히는 것들이 있다:
+ *  - 메모를 치다가 Ctrl+S 를 바로 눌렀을 때 그 글이 파일에 들어가는지.
+ *    (아직 엔진에 반영되지 않은 글을 밀어 넣는 장치가 동작하는지)
+ *  - F5 가 실제로 발표 화면을 띄우고 방향키로 장이 넘어가는지.
+ *  - 발표자 보기에 그 장의 메모가 나오는지.
+ *
+ *   node apps/editor/e2e/slideshow.mjs <baseUrl> <샘플디렉터리> <출력디렉터리>
+ */
+import { readFileSync, mkdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+
+const require_ = createRequire(import.meta.url);
+const { chromium } = require_(process.env.PLAYWRIGHT_PATH ?? 'playwright');
+
+const [baseUrl, samplesDir, outDir] = process.argv.slice(2);
+mkdirSync(outDir, { recursive: true });
+
+const browser = await chromium.launch({ args: ['--headless=new', '--no-sandbox'] });
+const context = await browser.newContext({
+  acceptDownloads: true,
+  viewport: { width: 1440, height: 980 },
+});
+const page = await context.newPage();
+
+const problems = [];
+page.on('console', (msg) => {
+  if (msg.type() === 'error') problems.push(`콘솔 오류: ${msg.text()}`);
+});
+page.on('pageerror', (err) => problems.push(`페이지 예외: ${err.message}`));
+
+const check = (label, ok, detail = '') => {
+  console.log(`${ok ? '  ✓' : '  ✗'} ${label}${detail ? ` — ${detail}` : ''}`);
+  if (!ok) problems.push(label + (detail ? ` (${detail})` : ''));
+};
+
+async function dropFile(name) {
+  const bytes = Array.from(readFileSync(`${samplesDir}/${name}`));
+  await page.evaluate(
+    async ([filename, data]) => {
+      const file = new File([new Uint8Array(data)], filename);
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      document
+        .querySelector('.app')
+        .dispatchEvent(
+          new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }),
+        );
+    },
+    [name, bytes],
+  );
+  await page.waitForTimeout(700);
+}
+
+await page.goto(baseUrl, { waitUntil: 'load' });
+await dropFile('sample.pptx');
+
+console.log('\n[메모판]');
+check('메모판이 슬라이드 아래에 있다', (await page.locator('.notes-input').count()) === 1);
+check(
+  '제목에 몇 번째 장인지 나온다',
+  ((await page.textContent('.notes-title')) ?? '').includes('1장'),
+);
+
+const NOTE_1 = '도입 3분. 청중에게 질문부터 던진다.';
+await page.locator('.notes-input').click();
+await page.locator('.notes-input').pressSequentially(NOTE_1);
+check('친 글이 메모판에 남는다', (await page.inputValue('.notes-input')) === NOTE_1);
+
+// 일부러 포커스를 옮기지 않고 바로 저장한다. 예전에는 여기서
+// 마지막으로 친 글이 통째로 빠졌다.
+await page.evaluate(() => {
+  delete window.showSaveFilePicker;
+  delete window.showOpenFilePicker;
+});
+const [download] = await Promise.all([
+  page.waitForEvent('download', { timeout: 15000 }),
+  page.keyboard.press('Control+s'),
+]);
+const savedPath = `${outDir}/notes.pptx`;
+await download.saveAs(savedPath);
+check('Ctrl+S 로 저장됐다', true, download.suggestedFilename());
+
+console.log('\n[저장한 파일 다시 열기]');
+await page.reload({ waitUntil: 'load' });
+await page.evaluate(() => {
+  const el = document.querySelector('.app');
+  if (!el) throw new Error('.app 이 없습니다');
+});
+const reopened = Array.from(readFileSync(savedPath));
+await page.evaluate(
+  async ([data]) => {
+    const file = new File([new Uint8Array(data)], 'notes.pptx');
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document
+      .querySelector('.app')
+      .dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+  },
+  [reopened],
+);
+await page.waitForTimeout(800);
+check(
+  '포커스를 옮기지 않고 저장한 메모가 파일에 들어 있다',
+  (await page.inputValue('.notes-input')) === NOTE_1,
+  (await page.inputValue('.notes-input')).slice(0, 40),
+);
+
+console.log('\n[장을 옮겨도 메모가 따라온다]');
+const thumbs = page.locator('.thumb:not(.thumb-add)');
+const slideCount = await thumbs.count();
+check('미리보기 칸이 있다', slideCount >= 2, `${slideCount}장`);
+
+const NOTE_2 = '두 번째 장 메모 — 사례는 짧게.';
+await thumbs.nth(1).click();
+await page.waitForTimeout(300);
+check('2장 메모는 비어 있다', (await page.inputValue('.notes-input')) === '');
+await page.locator('.notes-input').click();
+await page.locator('.notes-input').pressSequentially(NOTE_2);
+
+await thumbs.nth(0).click();
+await page.waitForTimeout(400);
+check('1장으로 돌아오면 1장 메모가 보인다', (await page.inputValue('.notes-input')) === NOTE_1);
+await thumbs.nth(1).click();
+await page.waitForTimeout(400);
+check('2장 메모도 그대로다', (await page.inputValue('.notes-input')) === NOTE_2);
+check(
+  '메모가 있는 장에 표시가 뜬다',
+  (await page.locator('.thumb-note-dot').count()) >= 2,
+  `${await page.locator('.thumb-note-dot').count()}개`,
+);
+
+console.log('\n[메모판 접기]');
+await page.getByRole('button', { name: '메모판 접기' }).click();
+check('접으면 입력칸이 사라진다', (await page.locator('.notes-input').count()) === 0);
+await page.getByRole('button', { name: '메모판 펼치기' }).click();
+check('다시 펼치면 글이 그대로다', (await page.inputValue('.notes-input')) === NOTE_2);
+
+console.log('\n[F5 발표 모드]');
+await page.locator('.deck-stage').click({ position: { x: 5, y: 5 } });
+await page.keyboard.press('F5');
+await page.waitForTimeout(500);
+check('발표 화면이 뜬다', (await page.locator('.show').count()) === 1);
+check(
+  'F5 는 처음부터 시작한다',
+  ((await page.textContent('.show-counter')) ?? '').startsWith('1 /'),
+  await page.textContent('.show-counter'),
+);
+await page.screenshot({ path: `${outDir}/show-01.png` });
+
+const slideBox = await page.locator('.show .slide').boundingBox();
+check('슬라이드가 화면을 채운다', slideBox !== null && slideBox.width > 1000, `${Math.round(slideBox?.width ?? 0)}px`);
+
+await page.keyboard.press('ArrowRight');
+await page.waitForTimeout(250);
+check(
+  '방향키로 다음 장으로 넘어간다',
+  ((await page.textContent('.show-counter')) ?? '').startsWith('2 /'),
+  await page.textContent('.show-counter'),
+);
+
+await page.keyboard.press('ArrowLeft');
+await page.waitForTimeout(250);
+check('왼쪽 방향키로 돌아온다', ((await page.textContent('.show-counter')) ?? '').startsWith('1 /'));
+
+console.log('\n[B 검은 화면]');
+await page.keyboard.press('b');
+await page.waitForTimeout(250);
+check('슬라이드가 가려진다', (await page.locator('.show .slide').count()) === 0);
+await page.keyboard.press('b');
+await page.waitForTimeout(250);
+check('다시 누르면 돌아온다', (await page.locator('.show .slide').count()) === 1);
+
+console.log('\n[S 발표자 보기]');
+await page.keyboard.press('ArrowRight'); // 2장 — 메모를 적어 둔 장
+await page.waitForTimeout(250);
+await page.keyboard.press('s');
+await page.waitForTimeout(400);
+check('발표자 보기로 바뀐다', (await page.locator('.show-presenter').count()) === 1);
+const notesText = (await page.textContent('.presenter-notes')) ?? '';
+check('그 장의 메모가 보인다', notesText.includes(NOTE_2), notesText.slice(0, 60));
+check(
+  '경과 시간이 보인다',
+  /^\d{2}:\d{2}$/.test(((await page.textContent('.presenter-clock')) ?? '').trim()),
+  await page.textContent('.presenter-clock'),
+);
+check('다음 장 미리보기가 있다', (await page.locator('.presenter-next .slide').count()) <= 1);
+check(
+  '몇 번째 장인지 보인다',
+  ((await page.textContent('.presenter-count')) ?? '').startsWith('2 /'),
+);
+await page.screenshot({ path: `${outDir}/show-02-presenter.png` });
+
+console.log('\n[Esc 로 나가기]');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(400);
+check('발표 화면이 닫힌다', (await page.locator('.show').count()) === 0);
+check('편집 화면으로 돌아온다', (await page.locator('.notes-input').count()) === 1);
+
+console.log('\n[Shift+F5 는 현재 장부터]');
+await thumbs.nth(1).click();
+await page.waitForTimeout(300);
+await page.locator('.deck-stage').click({ position: { x: 5, y: 5 } });
+await page.keyboard.press('Shift+F5');
+await page.waitForTimeout(400);
+check(
+  '2장부터 시작한다',
+  ((await page.textContent('.show-counter')) ?? '').startsWith('2 /'),
+  await page.textContent('.show-counter'),
+);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+
+console.log('\n[발표 중에는 편집 단축키가 듣지 않는다]');
+const beforeSlides = await thumbs.count();
+await page.keyboard.press('F5');
+await page.waitForTimeout(400);
+await page.keyboard.press('Control+m'); // 평소라면 슬라이드 추가
+await page.waitForTimeout(400);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(400);
+check(
+  '발표 중 Ctrl+M 이 슬라이드를 늘리지 않았다',
+  (await thumbs.count()) === beforeSlides,
+  `${beforeSlides} → ${await thumbs.count()}`,
+);
+
+console.log('\n[장이 많을 때 슬라이드 목록]');
+// 예전에 여기가 깨졌다: 목록이 세로 flex 라 장이 많아지면 칸이 min-height
+// 까지 찌그러지는데 안의 미리보기는 그대로라 아래 칸을 덮었다.
+await page.reload({ waitUntil: 'load' });
+await dropFile('many-slides.pptx');
+await page.waitForTimeout(600);
+const rail = await page.evaluate(() =>
+  Array.from(document.querySelectorAll('.thumb:not(.thumb-add)')).slice(0, 8).map((el) => {
+    const box = el.getBoundingClientRect();
+    const slide = el.querySelector('.slide')?.getBoundingClientRect();
+    return { height: Math.round(box.height), slide: Math.round(slide?.height ?? 0) };
+  }),
+);
+check('목록 칸이 여러 개 보인다', rail.length >= 5, `${rail.length}칸`);
+const bleeding = rail.filter((r) => r.slide > r.height);
+check(
+  '미리보기가 칸 밖으로 넘치지 않는다',
+  bleeding.length === 0,
+  bleeding.length > 0 ? `칸 ${bleeding[0].height}px < 미리보기 ${bleeding[0].slide}px` : `칸 ${rail[0]?.height}px`,
+);
+const sameHeight = new Set(rail.map((r) => r.height)).size === 1;
+check('칸 높이가 모두 같다', sameHeight, [...new Set(rail.map((r) => r.height))].join(', '));
+await page.screenshot({ path: `${outDir}/rail.png`, clip: { x: 0, y: 0, width: 420, height: 820 } });
+
+await browser.close();
+
+if (problems.length > 0) {
+  console.error(`\n실패 ${problems.length}건:`);
+  for (const p of problems) console.error(`  - ${p}`);
+  process.exit(1);
+}
+console.log('\n발표 모드·메모판 확인 완료');

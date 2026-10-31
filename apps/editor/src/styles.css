@@ -335,6 +335,10 @@ button.ghost {
   background: var(--panel);
   padding: 8px;
   min-height: 44px;
+  /* 세로로 쌓는 flex 안에서는 칸이 기본적으로 찌그러진다. 장이 많아지면
+     칸 높이가 min-height 까지 줄어드는데 안의 미리보기는 그대로라
+     아래 칸을 덮어 버린다. 줄이지 말고 넘치면 목록을 굴리게 한다. */
+  flex-shrink: 0;
 }
 
 /* 미리보기는 본 화면과 같은 경로로 그린다. 클릭만 받고 안쪽은 건드리지 않는다. */
@@ -862,4 +866,259 @@ kbd {
 .slide-shape-text:hover .shape-edit-hint {
   opacity: 0.95;
   pointer-events: auto;
+}
+
+/* ------------------------------------------------------------- 메모판 */
+
+.notes-pane {
+  width: 960px;
+  max-width: 100%;
+  margin-top: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.notes-pane-closed {
+  border-style: dashed;
+  background: transparent;
+}
+
+.notes-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.notes-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.notes-count {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.notes-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.notes-toggle:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.notes-dot,
+.thumb-note-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.thumb-note-dot {
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.notes-input {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  max-height: 240px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--panel);
+  border: 0;
+  outline: none;
+  resize: vertical;
+}
+
+.notes-input::placeholder {
+  color: var(--ink-muted);
+}
+
+/* ------------------------------------------------------------- 발표 모드 */
+
+.show {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 비율이 안 맞아 남는 자리는 검게. 늘려 채우면 글자가 찌그러진다. */
+  background: #000;
+  cursor: none;
+}
+
+.show:hover {
+  cursor: default;
+}
+
+.show-empty {
+  flex-direction: column;
+  gap: 16px;
+  color: #fff;
+}
+
+.show-counter {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  padding: 2px 10px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.show-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.show-hint b {
+  color: #fff;
+}
+
+/* -------------------------------------------------------- 발표자 보기 */
+
+.show-presenter {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 16px 24px 24px;
+  color: #e8eaed;
+  background: #101216;
+  cursor: default;
+}
+
+.presenter-bar {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  padding-bottom: 12px;
+}
+
+.presenter-clock {
+  font-size: 34px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.presenter-count {
+  font-size: 18px;
+  color: #9aa1ac;
+}
+
+.presenter-keys {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+.presenter-body {
+  display: flex;
+  flex: 1;
+  gap: 24px;
+  min-height: 0;
+}
+
+.presenter-main {
+  display: flex;
+  /* 16:9 장표를 옆에 세우면 세로가 남는다. 위로 몰지 말고 가운데에 둔다. */
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 62%;
+}
+
+.presenter-main > div {
+  cursor: pointer;
+}
+
+.presenter-side {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.presenter-side h2 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #9aa1ac;
+  text-transform: uppercase;
+}
+
+.presenter-next {
+  flex: 0 0 auto;
+}
+
+.presenter-notes {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px;
+  background: #1a1d23;
+  border-radius: var(--radius);
+}
+
+.presenter-notes pre {
+  margin: 0;
+  overflow-y: auto;
+  font: inherit;
+  /* 메모는 강의 중에 흘끗 보는 글이다. 본문보다 크고 넉넉하게. */
+  font-size: 19px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.show-presenter .muted {
+  color: #767d88;
+}
+
+.toolbar-tail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.install-button {
+  border-color: var(--accent);
+  color: var(--accent);
 }

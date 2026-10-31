@@ -1,0 +1,68 @@
+#
+# main 에 올라가면 웹에 배포한다.
+#
+# 설치형 앱(PWA)은 https 주소가 있어야 설치된다. 그래서 그냥 파일을 올려
+# 두는 게 아니라 Pages 로 띄운다. 올라간 주소에서 "앱 설치"를 누르면
+# 바탕화면 아이콘이 생기고, 그 뒤로는 인터넷 없이도 열린다.
+#
+# 처음 한 번은 저장소 Settings → Pages → Source 를 "GitHub Actions" 로
+# 바꿔 줘야 한다. 그 뒤로는 손댈 일이 없다.
+#
+name: 웹에 배포
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포가 겹치면 뒤엣것만 남긴다. 앞 배포를 중간에 끊지는 않는다.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 빌드
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # 깨진 것을 올리지 않는다. 타입 검사와 단위 테스트를 먼저 통과해야 한다.
+      # (브라우저 종단 테스트는 Playwright 가 필요해 여기서는 돌리지 않는다.)
+      - name: 타입 검사
+        run: npm run build
+
+      - name: 단위 테스트
+        run: npm test
+
+      # build:single 안에 build:web(+서비스 워커 생성)이 들어 있어서
+      # 한 번에 웹 판과 단일 HTML 파일이 같이 나온다.
+      - name: 웹 판과 단일 HTML 파일 만들기
+        run: npm run build:single
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/editor/dist
+
+  deploy:
+    name: 배포
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -8,6 +8,15 @@
       name="description"
       content="hwp, hwpx, docx, pptx 를 브라우저에서 열고 고치는 무료 편집기. 파일은 기기를 떠나지 않습니다."
     />
+    <!-- 설치형 앱(PWA)으로 쓰기 위한 것들. 단일 HTML 파일로 묶을 때는
+         바깥 파일을 가리킬 수 없으므로 번들러가 이 줄들을 걷어낸다. -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta name="theme-color" content="#1e2749" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="자모 오피스" />
   </head>
   <body>
     <div id="root"></div>

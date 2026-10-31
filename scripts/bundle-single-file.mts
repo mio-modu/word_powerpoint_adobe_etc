@@ -33,7 +33,12 @@ let html = readFileSync(join(distDir, 'index.html'), 'utf8');
 html = html
   .replace(/<script[^>]*src="[^"]*"[^>]*><\/script>/g, '')
   .replace(/<link[^>]*rel="stylesheet"[^>]*>/g, '')
-  .replace(/<link[^>]*rel="modulepreload"[^>]*>/g, '');
+  .replace(/<link[^>]*rel="modulepreload"[^>]*>/g, '')
+  // 설치형 앱용 참조는 파일 하나짜리에서는 가리킬 곳이 없다. 남겨 두면
+  // 브라우저가 매번 없는 파일을 찾아 콘솔에 오류를 남긴다.
+  .replace(/<link[^>]*rel="manifest"[^>]*>/g, '')
+  .replace(/<link[^>]*rel="icon"[^>]*>/g, '')
+  .replace(/<link[^>]*rel="apple-touch-icon"[^>]*>/g, '');
 
 const base64 = js.toString('base64');
 

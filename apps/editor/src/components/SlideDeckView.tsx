@@ -8,6 +8,7 @@ import {
 } from '@jamo/core';
 import { useState, type CSSProperties } from 'react';
 import { Editable } from './Editable.js';
+import { NotesPane } from './NotesPane.js';
 import { charCss } from './TextDocumentView.js';
 
 /**
@@ -30,6 +31,15 @@ export interface SlideDeckViewProps {
   onRemoveSlide: (index: number) => void;
   /** 그림 파트를 화면용 주소로. */
   imageUrl: (part: string) => string | undefined;
+  /** 지금 보고 있는 장. 발표 모드와 같은 값을 써야 해서 바깥이 들고 있다. */
+  current: number;
+  onCurrentChange: (index: number) => void;
+  /** 발표자 메모를 엔진에 반영한다. */
+  onNotesCommit: (slideIndex: number, text: string) => void;
+  notesOpen: boolean;
+  onToggleNotes: () => void;
+  /** 이 장부터 발표 시작. */
+  onPresent: (fromIndex: number) => void;
 }
 
 const SLIDE_WIDTH_PX = 960;
@@ -273,7 +283,7 @@ function SlideTable({ table, scale }: { table: JamoTable; scale: number }): JSX.
   );
 }
 
-function SlideCanvas({
+export function SlideCanvas({
   slide,
   deck,
   width,
@@ -332,8 +342,13 @@ export function SlideDeckView({
   onAddSlide,
   onRemoveSlide,
   imageUrl,
+  current,
+  onCurrentChange,
+  onNotesCommit,
+  notesOpen,
+  onToggleNotes,
+  onPresent,
 }: SlideDeckViewProps): JSX.Element {
-  const [current, setCurrent] = useState(0);
   const index = Math.min(current, Math.max(deck.slides.length - 1, 0));
   const slide = deck.slides[index];
 
@@ -345,9 +360,12 @@ export function SlideDeckView({
             key={i}
             type="button"
             className={`thumb${i === index ? ' thumb-active' : ''}`}
-            onClick={() => setCurrent(i)}
+            onClick={() => onCurrentChange(i)}
           >
-            <span className="thumb-no">{i + 1}</span>
+            <span className="thumb-no">
+              {i + 1}
+              {item.notes && <span className="thumb-note-dot" title="메모 있음" />}
+            </span>
             {/* 작은 미리보기도 같은 그리기 경로를 쓴다. 본 화면과 다르게 보이면
                 어느 장인지 찾기 어렵다. */}
             <span className="thumb-canvas">
@@ -388,12 +406,28 @@ export function SlideDeckView({
               <span className="muted">
                 {index + 1} / {deck.slides.length}
               </span>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => onPresent(index)}
+                title="이 장부터 발표 (Shift+F5). 처음부터는 F5."
+              >
+                ▶ 발표 시작
+              </button>
               {!readOnly && deck.slides.length > 1 && (
                 <button type="button" className="ghost" onClick={() => onRemoveSlide(index)}>
                   이 슬라이드 삭제
                 </button>
               )}
             </div>
+            <NotesPane
+              slideIndex={index}
+              value={slide.notes}
+              readOnly={readOnly}
+              open={notesOpen}
+              onToggle={onToggleNotes}
+              onCommit={onNotesCommit}
+            />
           </>
         ) : (
           <p className="muted">슬라이드가 없습니다.</p>

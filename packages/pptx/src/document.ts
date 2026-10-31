@@ -29,6 +29,7 @@ import {
   themeXml,
   viewPropsXml,
 } from './templates.js';
+import { readNotes, writeNotes } from './notes.js';
 import { emptyTheme, readTheme, type ThemeColors } from './theme.js';
 import {
   readBackground,
@@ -254,6 +255,22 @@ export class PptxFile {
     }
     this.pkg.removePart(part);
     return true;
+  }
+
+  // ------------------------------------------------------------------ 메모
+
+  /** 슬라이드의 발표자 메모. 없으면 undefined. */
+  notes(index: number): string | undefined {
+    const part = this.slidePaths()[index];
+    if (part === undefined) throw new PptxError(`슬라이드 ${index} 이 없습니다`);
+    return readNotes(this.pkg, part);
+  }
+
+  /** 발표자 메모를 적는다. 메모 파트가 없던 슬라이드면 만들어 붙인다. */
+  setNotes(index: number, text: string): void {
+    const part = this.slidePaths()[index];
+    if (part === undefined) throw new PptxError(`슬라이드 ${index} 이 없습니다`);
+    writeNotes(this.pkg, this.presentationPart, part, text);
   }
 
   /**
@@ -547,9 +564,11 @@ export class PptxFile {
         zIndex: index,
       }));
 
+      const slidePart = this.slidePaths()[i];
       slides.push({
         shapes,
         background: readBackground([slideRoot, ctx.layoutRoot, ctx.masterRoot], ctx.theme),
+        notes: slidePart ? readNotes(this.pkg, slidePart) : undefined,
         source: slideRoot,
       });
     }
