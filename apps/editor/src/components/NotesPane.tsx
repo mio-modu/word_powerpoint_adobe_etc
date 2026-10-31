@@ -19,6 +19,8 @@ const IDLE_MS = 1200;
 export interface NotesPaneProps {
   /** 슬라이드와 폭을 맞춘다. */
   width: number;
+  /** 경계선을 끌어 정한 높이(px). */
+  height: number;
   slideIndex: number;
   /** 엔진이 들고 있는 현재 메모. */
   value: string | undefined;
@@ -30,6 +32,7 @@ export interface NotesPaneProps {
 
 export function NotesPane({
   width,
+  height,
   slideIndex,
   value,
   readOnly,
@@ -113,7 +116,7 @@ export function NotesPane({
   }
 
   return (
-    <div className="notes-pane" style={{ width: `${width}px` }}>
+    <div className="notes-pane" style={{ width: `${width}px`, height: `${height}px` }}>
       <div className="notes-head">
         <button type="button" className="notes-toggle" onClick={onToggle}>
           메모판 접기

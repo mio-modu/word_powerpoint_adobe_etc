@@ -292,6 +292,56 @@ for (const size of [
   await small.close();
 }
 
+console.log('\n[메모판 높이 조절]');
+// 파워포인트처럼 경계선을 끌어 메모판을 키우고 슬라이드를 줄인다.
+await page.reload({ waitUntil: 'load' });
+await dropFile('many-slides.pptx');
+await page.waitForTimeout(700);
+
+const measure = () =>
+  page.evaluate(() => {
+    const n = document.querySelector('.notes-input')?.getBoundingClientRect();
+    const sl = document.querySelector('.deck-canvas .slide')?.getBoundingClientRect();
+    return {
+      notes: n ? Math.round(n.height) : 0,
+      bottom: n ? Math.round(n.bottom) : 0,
+      slide: sl ? Math.round(sl.width) : 0,
+      view: window.innerHeight,
+    };
+  });
+
+const start = await measure();
+check('경계선이 있다', (await page.locator('.notes-splitter').count()) === 1);
+
+const grip = await page.locator('.notes-splitter').boundingBox();
+await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+await page.mouse.down();
+await page.mouse.move(grip.x + grip.width / 2, grip.y - 150, { steps: 10 });
+await page.mouse.up();
+await page.waitForTimeout(350);
+const bigger = await measure();
+check('위로 끌면 메모판이 커진다', bigger.notes > start.notes + 70, `${start.notes} → ${bigger.notes}`);
+check('그만큼 슬라이드가 줄어든다', bigger.slide < start.slide, `${start.slide} → ${bigger.slide}`);
+check('커져도 화면 안에 있다', bigger.bottom <= bigger.view, `${bigger.bottom} / ${bigger.view}`);
+
+// 끝까지 아래로 끌어도 메모판이 없어지면 안 된다.
+const grip2 = await page.locator('.notes-splitter').boundingBox();
+await page.mouse.move(grip2.x + grip2.width / 2, grip2.y + grip2.height / 2);
+await page.mouse.down();
+await page.mouse.move(grip2.x + grip2.width / 2, grip2.y + 400, { steps: 10 });
+await page.mouse.up();
+await page.waitForTimeout(350);
+const smaller = await measure();
+check('아래로 끌면 줄어든다', smaller.notes < bigger.notes, `${bigger.notes} → ${smaller.notes}`);
+// 쪽지만큼 남으면 있으나 마나다. 두세 줄은 보여야 한다.
+check('끝까지 끌어도 글 칸에 두세 줄은 남는다', smaller.notes >= 48, `${smaller.notes}px`);
+
+await page.locator('.notes-splitter').dblclick();
+await page.waitForTimeout(300);
+const reset = await measure();
+check('두 번 누르면 기본 높이로 돌아온다', reset.notes > smaller.notes, `${smaller.notes} → ${reset.notes}`);
+await page.screenshot({ path: `${outDir}/notes-splitter.png` });
+
 await browser.close();
 
 if (problems.length > 0) {
