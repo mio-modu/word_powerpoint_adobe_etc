@@ -459,6 +459,69 @@ await page.waitForTimeout(350);
 check('두 번 누르면 기본 폭으로', Math.abs((await widths()).rail - w0.rail) <= 2, `${w2.rail} → ${(await widths()).rail}px`);
 await page.screenshot({ path: `${outDir}/rail-splitter.png` });
 
+console.log('\n[목록에서 화살표로 장 넘기기]');
+// 예전에는 화살표가 목록을 40px 씩 밀기만 하고 고른 장은 그대로였다.
+// 게다가 목록을 손으로 굴려 두면 고른 장이 화면 밖에 있어도 따라오지 않았다.
+const railState = () =>
+  page.evaluate(() => {
+    const rail = document.querySelector('.deck-rail');
+    const active = document.querySelector('.thumb-active');
+    const items = Array.from(document.querySelectorAll('.thumb:not(.thumb-add)'));
+    const ab = active?.getBoundingClientRect();
+    const rb = rail?.getBoundingClientRect();
+    return {
+      index: items.indexOf(active),
+      visible: ab && rb ? ab.top >= rb.top - 1 && ab.bottom <= rb.bottom + 1 : false,
+      scrollTop: Math.round(rail?.scrollTop ?? 0),
+      count: items.length,
+    };
+  });
+
+await page.locator('.thumb:not(.thumb-add)').nth(2).click();
+await page.waitForTimeout(300);
+const r0 = await railState();
+check('미리보기를 누르면 그 장이 선택된다', r0.index === 2, `${r0.index}번째`);
+
+await page.keyboard.press('ArrowDown');
+await page.waitForTimeout(250);
+const r1 = await railState();
+check('↓ 로 다음 장으로 넘어간다', r1.index === 3, `${r0.index} → ${r1.index}`);
+check('본 화면도 같이 바뀐다', ((await page.textContent('.slide-counter')) ?? '').startsWith('4 /'));
+
+await page.keyboard.press('ArrowUp');
+await page.waitForTimeout(250);
+check('↑ 로 이전 장으로 돌아온다', (await railState()).index === 2);
+
+await page.keyboard.press('End');
+await page.waitForTimeout(300);
+const rEnd = await railState();
+check('End 로 마지막 장', rEnd.index === rEnd.count - 1, `${rEnd.index + 1} / ${rEnd.count}`);
+check('마지막 장이 목록에 보인다', rEnd.visible, `scrollTop ${rEnd.scrollTop}`);
+
+await page.keyboard.press('Home');
+await page.waitForTimeout(300);
+const rHome = await railState();
+check('Home 으로 첫 장', rHome.index === 0);
+check('첫 장이 목록에 보인다', rHome.visible);
+
+// 손으로 목록을 끝까지 굴려 놓고 장을 바꿔 본다.
+await page.evaluate(() => {
+  document.querySelector('.deck-rail').scrollTop = 99999;
+});
+await page.waitForTimeout(250);
+check('굴려 놓으면 고른 장이 화면 밖으로 나간다', !(await railState()).visible);
+await page.keyboard.press('ArrowDown');
+await page.waitForTimeout(350);
+const rBack = await railState();
+check('장을 바꾸면 목록이 따라 돌아온다', rBack.visible && rBack.index === 1, `${rBack.index + 1}번째`);
+
+// 화살표 한 번에 한 장씩만 움직여야 한다 — 400px 씩 튀던 적이 있다.
+const before = (await railState()).scrollTop;
+await page.keyboard.press('ArrowDown');
+await page.waitForTimeout(300);
+const jump = Math.abs((await railState()).scrollTop - before);
+check('한 번에 한 장 높이만큼만 움직인다', jump <= 200, `${jump}px`);
+
 await browser.close();
 
 if (problems.length > 0) {

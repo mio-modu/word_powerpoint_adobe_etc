@@ -6,7 +6,14 @@ import {
   type JamoTable,
   type XmlElement,
 } from '@jamo/core';
-import { type CSSProperties, useState } from 'react';
+import {
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { Editable } from './Editable.js';
 import { NotesPane } from './NotesPane.js';
 import { useElementSize } from '../lib/useElementSize.js';
@@ -422,6 +429,62 @@ export function SlideDeckView({
 
   const thumbWidth = Math.max(72, rail.size - THUMB_CHROME_PX);
 
+  // 미리보기 단추들. 선택이 바뀌면 그 자리로 목록을 굴려야 해서 들고 있는다.
+  const thumbRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // 선택된 장이 늘 보이게 한다. 목록을 손으로 굴려 둔 뒤 장을 바꾸면
+  // 고른 장이 화면 밖에 있어 어디로 갔는지 알 수 없게 된다.
+  // 'nearest' 라서 이미 보이면 아무것도 하지 않는다 — 공연히 들썩이지 않는다.
+  useEffect(() => {
+    thumbRefs.current[index]?.scrollIntoView({ block: 'nearest' });
+  }, [index]);
+
+  /**
+   * 목록에서 화살표로 장을 넘긴다.
+   *
+   * 예전에는 브라우저 기본 동작만 남아 목록이 40px 씩 밀릴 뿐 고른 장은
+   * 그대로였다. 파워포인트는 화살표로 장이 넘어가고 목록이 따라 움직인다.
+   */
+  const onRailKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLElement>) => {
+      const last = deck.slides.length - 1;
+      if (last < 0) return;
+      const step = 5; // PageUp/PageDown 한 번에 넘길 장 수
+      let next: number;
+      switch (event.key) {
+        case 'ArrowDown':
+        case 'ArrowRight':
+          next = Math.min(index + 1, last);
+          break;
+        case 'ArrowUp':
+        case 'ArrowLeft':
+          next = Math.max(index - 1, 0);
+          break;
+        case 'PageDown':
+          next = Math.min(index + step, last);
+          break;
+        case 'PageUp':
+          next = Math.max(index - step, 0);
+          break;
+        case 'Home':
+          next = 0;
+          break;
+        case 'End':
+          next = last;
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+      if (next !== index) onCurrentChange(next);
+      // 다음 화살표도 이어서 먹게 포커스를 옮긴다. 굴리는 건 위 효과가
+      // 'nearest' 로 하므로 여기서는 막는다 — 둘 다 굴리면 한 장 넘겼는데
+      // 목록이 400px 씩 튄다.
+      thumbRefs.current[next]?.focus({ preventScroll: true });
+    },
+    [deck.slides.length, index, onCurrentChange],
+  );
+
   const aspect = hwpunit.toPx(deck.slideSize.width) / hwpunit.toPx(deck.slideSize.height);
 
   // 폭 맞춤에서는 **세로를 보지 않는다**. 그래야 메모판을 끌어 높이가
@@ -446,12 +509,24 @@ export function SlideDeckView({
 
   return (
     <div className="deck" ref={deckRef}>
-      <aside className="deck-rail" style={{ width: `${Math.round(rail.size)}px` }}>
+      <aside
+        className="deck-rail"
+        style={{ width: `${Math.round(rail.size)}px` }}
+        aria-label="슬라이드 목록 — 화살표로 장을 넘깁니다"
+        onKeyDown={onRailKeyDown}
+      >
         {deck.slides.map((item, i) => (
           <button
             key={i}
             type="button"
+            ref={(el) => {
+              thumbRefs.current[i] = el;
+            }}
             className={`thumb${i === index ? ' thumb-active' : ''}`}
+            aria-current={i === index ? 'true' : undefined}
+            // 고른 장만 Tab 으로 들어온다. 42장짜리에서 Tab 을 42번 누르게
+            // 하지 않으려는 것 — 들어온 다음은 화살표로 옮긴다.
+            tabIndex={i === index ? 0 : -1}
             onClick={() => onCurrentChange(i)}
           >
             <span className="thumb-no">
