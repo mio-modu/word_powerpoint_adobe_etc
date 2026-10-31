@@ -321,14 +321,14 @@ button.ghost {
 }
 
 .deck {
-  gap: 12px;
+  gap: 0;
 }
 
 .deck-rail {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 212px;
+  /* 폭은 경계선을 끌어 정한다 (코드가 style 로 넣는다). */
   flex-shrink: 0;
   /* 부모가 화면 높이에 맞춰져 있으므로 100vh 를 따로 계산하지 않는다.
      도구막대 줄 수가 바뀌어도 알아서 맞는다. */
@@ -1238,4 +1238,51 @@ kbd {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* --------------------------------------- 목록 ↔ 장표 좌우 경계선 */
+
+.rail-splitter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.rail-splitter-grip {
+  width: 5px;
+  height: 64px;
+  border-radius: 999px;
+  background: var(--ink-muted);
+  opacity: 0.35;
+  transition:
+    background 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.rail-splitter:hover .rail-splitter-grip,
+.rail-splitter:focus-visible .rail-splitter-grip {
+  background: var(--accent);
+  opacity: 1;
+}
+
+.rail-splitter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+/* 좁은 화면에서는 목록이 가로로 눕는다. 그때는 세로 경계선이 의미가 없다. */
+@media (max-width: 860px) {
+  .rail-splitter {
+    display: none;
+  }
+
+  .deck-rail {
+    width: 100% !important;
+  }
 }

@@ -415,6 +415,50 @@ check('장 번호가 도구막대에 있다', (await page.locator('.slide-counte
   (await page.textContent('.slide-counter')) ?? '');
 check('슬라이드 아래 도구 줄은 없앴다', (await page.locator('.deck-actions').count()) === 0);
 
+console.log('\n[목록 폭 조절]');
+// 왼쪽 목록을 넓히면 그만큼 장표 자리가 줄어야 한다. 둘이 같은 자리를
+// 나눠 쓰므로 한쪽만 커지면 다른 쪽이 화면 밖으로 밀린다.
+const widths = () =>
+  page.evaluate(() => {
+    const r = document.querySelector('.deck-rail')?.getBoundingClientRect();
+    const sl = document.querySelector('.deck-canvas .slide')?.getBoundingClientRect();
+    const th = document.querySelector('.thumb .slide')?.getBoundingClientRect();
+    return {
+      rail: r ? Math.round(r.width) : 0,
+      slide: sl ? Math.round(sl.width) : 0,
+      thumb: th ? Math.round(th.width) : 0,
+    };
+  });
+
+check('목록 경계선이 있다', (await page.locator('.rail-splitter').count()) === 1);
+const w0 = await widths();
+
+const railGrip = await page.locator('.rail-splitter').boundingBox();
+await page.mouse.move(railGrip.x + railGrip.width / 2, railGrip.y + railGrip.height / 2);
+await page.mouse.down();
+await page.mouse.move(railGrip.x + railGrip.width / 2 + 140, railGrip.y + railGrip.height / 2, { steps: 10 });
+await page.mouse.up();
+await page.waitForTimeout(400);
+const w1 = await widths();
+check('오른쪽으로 끌면 목록이 넓어진다', w1.rail > w0.rail + 100, `${w0.rail} → ${w1.rail}px`);
+check('그만큼 장표가 줄어든다', w1.slide < w0.slide - 100, `${w0.slide} → ${w1.slide}px`);
+check('미리보기도 같이 커진다', w1.thumb > w0.thumb + 100, `${w0.thumb} → ${w1.thumb}px`);
+
+const railGrip2 = await page.locator('.rail-splitter').boundingBox();
+await page.mouse.move(railGrip2.x + railGrip2.width / 2, railGrip2.y + railGrip2.height / 2);
+await page.mouse.down();
+await page.mouse.move(railGrip2.x + railGrip2.width / 2 - 700, railGrip2.y + railGrip2.height / 2, { steps: 12 });
+await page.mouse.up();
+await page.waitForTimeout(400);
+const w2 = await widths();
+check('끝까지 줄여도 목록이 남는다', w2.rail >= 110, `${w2.rail}px`);
+check('장표는 다시 넓어진다', w2.slide > w1.slide, `${w1.slide} → ${w2.slide}px`);
+
+await page.locator('.rail-splitter').dblclick();
+await page.waitForTimeout(350);
+check('두 번 누르면 기본 폭으로', Math.abs((await widths()).rail - w0.rail) <= 2, `${w2.rail} → ${(await widths()).rail}px`);
+await page.screenshot({ path: `${outDir}/rail-splitter.png` });
+
 await browser.close();
 
 if (problems.length > 0) {

@@ -11,6 +11,7 @@ import { flushPendingEdit } from './lib/pendingEdit.js';
 import {
   consumeLaunchFiles,
   startupNewDocument,
+  useAppUpdate,
   useInstallPrompt,
 } from './lib/pwa.js';
 import { keyOf, matchBinding, yieldToBrowser, type CommandId } from './lib/keymap.js';
@@ -36,6 +37,7 @@ export function App(): JSX.Element {
   const pendingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const fileSystemAccess = supportsFileSystemAccess();
   const installPrompt = useInstallPrompt();
+  const appUpdate = useAppUpdate();
 
   const run = useCallback(
     (command: CommandId) => {
@@ -288,6 +290,17 @@ export function App(): JSX.Element {
       )}
 
       {state && !state.readOnly && <TableToolbar session={session} />}
+
+      {appUpdate.ready && (
+        <div className="banner banner-info">
+          <span>
+            새 판이 준비됐습니다. 저장하지 않은 내용이 있으면 먼저 저장한 뒤 새로 고치세요.
+          </span>
+          <button type="button" onClick={appUpdate.reload}>
+            새로 고치기
+          </button>
+        </div>
+      )}
 
       {session.error && (
         <div className="banner banner-error">

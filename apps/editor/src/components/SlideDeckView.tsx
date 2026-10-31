@@ -6,10 +6,11 @@ import {
   type JamoTable,
   type XmlElement,
 } from '@jamo/core';
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { type CSSProperties, useState } from 'react';
 import { Editable } from './Editable.js';
 import { NotesPane } from './NotesPane.js';
 import { useElementSize } from '../lib/useElementSize.js';
+import { useDragSize } from '../lib/useDragSize.js';
 import { charCss } from './TextDocumentView.js';
 
 /**
@@ -56,37 +57,33 @@ const SLIDE_MIN_WIDTH_PX = 320;
 /** 넓은 화면에서 끝없이 커지지 않게. */
 const SLIDE_MAX_WIDTH_PX = 2000;
 
-/** 메모판 기본 높이. 파워포인트의 메모 칸과 비슷한 정도. */
-// 기본값은 장표 쪽에 넉넉히 준다. 메모를 많이 쓸 때는 경계선을 끌면 되고,
-// 그 높이는 기억된다. 반대로 기본을 크게 잡으면 장표가 작은 채로 남는다.
-const NOTES_DEFAULT_PX = 112;
-// 머리글 줄(약 34px)이 이 높이 안에 함께 들어간다. 64 로 잡았더니 글 칸에
-// 23px 밖에 안 남아 한 줄도 못 보는 쪽지가 됐다. 글 칸에 두세 줄은 남긴다.
-// 더 줄이고 싶으면 '메모판 접기'가 있다.
-const NOTES_MIN_PX = 96;
+/**
+ * 메모판 기본 높이.
+ *
+ * 장표 쪽에 넉넉히 준다. 메모를 많이 쓸 때는 경계선을 끌면 되고 그 높이는
+ * 기억된다. 반대로 기본을 크게 잡으면 장표가 작은 채로 남는다.
+ */
+const NOTES_DEFAULT_PX = 94;
+/**
+ * 머리글 줄(약 37px)이 이 높이 안에 함께 들어간다. 64 로 잡았더니 글 칸에
+ * 23px 밖에 안 남아 한 줄도 못 보는 쪽지가 됐다. 글 칸에 두 줄(약 50px)은
+ * 남는 값으로 잡는다. 더 줄이고 싶으면 '메모판 접기'가 있다.
+ */
+const NOTES_MIN_PX = 88;
 /** 메모판을 아무리 키워도 슬라이드에 이만큼은 남긴다. */
 const SLIDE_KEEP_PX = 200;
+
+/** 슬라이드 목록 폭. 끌어서 바꾸면 그만큼 장표 자리가 줄고 늘어난다. */
+const RAIL_DEFAULT_PX = 212;
+const RAIL_MIN_PX = 116;
+/** 목록을 아무리 넓혀도 장표에 이만큼은 남긴다. */
+const STAGE_KEEP_PX = 360;
+
 const NOTES_HEIGHT_KEY = 'jamo.notesHeight';
+const RAIL_WIDTH_KEY = 'jamo.railWidth';
 
-function readStoredNotesHeight(): number {
-  try {
-    const raw = localStorage.getItem(NOTES_HEIGHT_KEY);
-    const value = raw === null ? Number.NaN : Number.parseInt(raw, 10);
-    return Number.isFinite(value) ? value : NOTES_DEFAULT_PX;
-  } catch {
-    // 사생활 보호 모드 등으로 막혀 있으면 기본값을 쓴다.
-    return NOTES_DEFAULT_PX;
-  }
-}
-
-function storeNotesHeight(value: number): void {
-  try {
-    localStorage.setItem(NOTES_HEIGHT_KEY, String(Math.round(value)));
-  } catch {
-    // 저장 못 해도 이번 창에서는 동작한다.
-  }
-}
-const THUMB_WIDTH_PX = 172;
+/** 번호 칸과 안팎 여백이 차지하는 몫. 목록 폭에서 이만큼 뺀 게 미리보기다. */
+const THUMB_CHROME_PX = 44;
 const FALLBACK_FONTS = `'Noto Sans KR', 'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', sans-serif`;
 
 function fillCss(fill: JamoFill | undefined): CSSProperties {
@@ -397,72 +394,34 @@ export function SlideDeckView({
   const index = Math.min(current, Math.max(deck.slides.length - 1, 0));
   const slide = deck.slides[index];
 
-  // 슬라이드가 들어갈 자리를 재서 그 안에 맞춘다. 고정 폭으로 그리면
-  // 노트북 화면에서 메모판이 화면 밖으로 밀려 "없는 것"이 된다.
+  // 자리를 재서 그 안에 맞춘다. 고정 폭으로 그리면 노트북 화면에서
+  // 메모판이 화면 밖으로 밀려 "없는 것"이 된다.
   const [canvasRef, canvasBox] = useElementSize<HTMLDivElement>();
   const [stageRef, stageBox] = useElementSize<HTMLDivElement>();
+  const [deckRef, deckBox] = useElementSize<HTMLDivElement>();
 
-  // 메모판 높이는 사용자가 경계선을 끌어 정한다. 파워포인트와 같은 조작이고,
-  // 강의 준비 중에는 메모를 크게, 장표를 볼 때는 작게 쓰게 된다.
-  const [notesHeight, setNotesHeight] = useState(readStoredNotesHeight);
+  // 메모판 높이 — 위로 끌면 커진다.
+  const notes = useDragSize({
+    storageKey: NOTES_HEIGHT_KEY,
+    defaultValue: NOTES_DEFAULT_PX,
+    min: NOTES_MIN_PX,
+    max: (stageBox.height > 0 ? stageBox.height : 600) - SLIDE_KEEP_PX,
+    axis: 'y',
+    reverse: true,
+  });
 
-  // 창이 작아지면 저장해 둔 높이가 화면보다 클 수 있다. 그대로 쓰면
-  // 슬라이드가 사라지므로 남은 자리에 맞춰 줄인다.
-  const maxNotesHeight = Math.max(
-    NOTES_MIN_PX,
-    (stageBox.height > 0 ? stageBox.height : 600) - SLIDE_KEEP_PX,
-  );
-  const clampNotes = useCallback(
-    (value: number) => Math.min(Math.max(value, NOTES_MIN_PX), maxNotesHeight),
-    [maxNotesHeight],
-  );
-  const effectiveNotesHeight = clampNotes(notesHeight);
+  // 슬라이드 목록 폭 — 오른쪽으로 끌면 넓어지고 그만큼 장표 자리가 줄어든다.
+  const rail = useDragSize({
+    storageKey: RAIL_WIDTH_KEY,
+    defaultValue: RAIL_DEFAULT_PX,
+    min: RAIL_MIN_PX,
+    max: (deckBox.width > 0 ? deckBox.width : 1200) - STAGE_KEEP_PX,
+    axis: 'x',
+    step: 16,
+  });
 
-  const dragFrom = useRef<{ y: number; height: number } | undefined>(undefined);
+  const thumbWidth = Math.max(72, rail.size - THUMB_CHROME_PX);
 
-  const onSplitterDown = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.currentTarget.setPointerCapture(event.pointerId);
-      dragFrom.current = { y: event.clientY, height: effectiveNotesHeight };
-    },
-    [effectiveNotesHeight],
-  );
-
-  const onSplitterMove = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      const from = dragFrom.current;
-      if (!from) return;
-      // 위로 끌면 메모판이 커진다.
-      setNotesHeight(clampNotes(from.height - (event.clientY - from.y)));
-    },
-    [clampNotes],
-  );
-
-  const endDrag = useCallback(() => {
-    if (!dragFrom.current) return;
-    dragFrom.current = undefined;
-    storeNotesHeight(effectiveNotesHeight);
-  }, [effectiveNotesHeight]);
-
-  // 키보드로도 조절할 수 있어야 한다. 경계선에 탭으로 들어와 위아래 화살표.
-  const onSplitterKey = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      const step = event.shiftKey ? 40 : 12;
-      if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        setNotesHeight((h) => clampNotes(h + step));
-      } else if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        setNotesHeight((h) => clampNotes(h - step));
-      } else return;
-    },
-    [clampNotes],
-  );
-
-  useEffect(() => {
-    storeNotesHeight(effectiveNotesHeight);
-  }, [effectiveNotesHeight]);
   const aspect = hwpunit.toPx(deck.slideSize.width) / hwpunit.toPx(deck.slideSize.height);
 
   // 폭 맞춤에서는 **세로를 보지 않는다**. 그래야 메모판을 끌어 높이가
@@ -486,8 +445,8 @@ export function SlideDeckView({
   const overflows = slideHeight > canvasBox.height + 1 || slideWidth > canvasBox.width + 1;
 
   return (
-    <div className="deck">
-      <aside className="deck-rail">
+    <div className="deck" ref={deckRef}>
+      <aside className="deck-rail" style={{ width: `${Math.round(rail.size)}px` }}>
         {deck.slides.map((item, i) => (
           <button
             key={i}
@@ -505,7 +464,7 @@ export function SlideDeckView({
               <SlideCanvas
                 slide={item}
                 deck={deck}
-                width={THUMB_WIDTH_PX}
+                width={thumbWidth}
                 readOnly
                 interactive={false}
                 imageUrl={imageUrl}
@@ -520,6 +479,16 @@ export function SlideDeckView({
           </button>
         )}
       </aside>
+
+      {/* 목록과 장표 사이. 끌면 목록이 넓어지고 그만큼 장표 자리가 줄어든다. */}
+      <div
+        className="rail-splitter"
+        aria-label="슬라이드 목록 폭 조절 — 끌거나 좌우 화살표를 누르세요"
+        title="끌어서 목록 폭을 바꿉니다. 두 번 누르면 기본 폭으로."
+        {...rail.separatorProps}
+      >
+        <span className="rail-splitter-grip" />
+      </div>
 
       <div className="deck-stage" ref={stageRef}>
         {slide ? (
@@ -544,26 +513,17 @@ export function SlideDeckView({
             {notesOpen && (
               <div
                 className="notes-splitter"
-                role="separator"
-                aria-orientation="horizontal"
                 aria-label="메모판 높이 조절 — 끌거나 위아래 화살표를 누르세요"
-                aria-valuenow={Math.round(effectiveNotesHeight)}
-                tabIndex={0}
                 title="끌어서 메모판 높이를 바꿉니다. 두 번 누르면 기본 높이로."
-                onPointerDown={onSplitterDown}
-                onPointerMove={onSplitterMove}
-                onPointerUp={endDrag}
-                onPointerCancel={endDrag}
-                onDoubleClick={() => setNotesHeight(clampNotes(NOTES_DEFAULT_PX))}
-                onKeyDown={onSplitterKey}
                 style={{ width: `${Math.round(fittedWidth)}px` }}
+                {...notes.separatorProps}
               >
                 <span className="notes-splitter-grip" />
               </div>
             )}
             <NotesPane
               width={Math.round(fittedWidth)}
-              height={effectiveNotesHeight}
+              height={notes.size}
               slideIndex={index}
               value={slide.notes}
               readOnly={readOnly}

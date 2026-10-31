@@ -31,6 +31,64 @@ export function registerServiceWorker(): void {
   });
 }
 
+// ------------------------------------------------------------ 새 판 알림
+
+/** 새 판이 있는지 다시 물어보는 간격. */
+const UPDATE_CHECK_MS = 15 * 60 * 1000;
+
+/**
+ * 새 판이 받아진 것을 알려 준다.
+ *
+ * 왜 필요한가: 웹에 올려 두면 고친 내용이 바로 반영돼야 하는데, 서비스
+ * 워커가 옛 판을 캐시에서 내주는 동안에는 새로고침해도 그대로다. 새 판이
+ * 다 받아진 시점을 잡아 "새로 고치세요" 라고 알려야 한다.
+ *
+ * 스스로 새로고침하지는 않는다. 고치던 문서가 열려 있을 수 있고, 저장하지
+ * 않은 내용이 날아가면 알림보다 훨씬 나쁘다. 누를지는 사용자가 정한다.
+ */
+export function useAppUpdate(): { ready: boolean; reload: () => void } {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    let registration: ServiceWorkerRegistration | undefined;
+    let stopped = false;
+
+    const watch = (worker: ServiceWorker | null): void => {
+      if (!worker) return;
+      worker.addEventListener('statechange', () => {
+        // controller 가 있다는 건 이미 한 번 띄운 적이 있다는 뜻이다.
+        // 처음 설치할 때까지 "새 판" 이라고 하면 안 된다.
+        if (worker.state === 'installed' && navigator.serviceWorker.controller && !stopped) {
+          setReady(true);
+        }
+      });
+    };
+
+    void navigator.serviceWorker
+      .getRegistration()
+      .then((reg) => {
+        if (!reg || stopped) return;
+        registration = reg;
+        if (reg.waiting && navigator.serviceWorker.controller) setReady(true);
+        watch(reg.installing);
+        reg.addEventListener('updatefound', () => watch(reg.installing));
+      })
+      .catch(() => undefined);
+
+    const timer = setInterval(() => {
+      void registration?.update().catch(() => undefined);
+    }, UPDATE_CHECK_MS);
+
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, []);
+
+  return { ready, reload: () => window.location.reload() };
+}
+
 // -------------------------------------------------------------- 설치 안내
 
 interface InstallPromptEvent extends Event {
