@@ -8,6 +8,7 @@ import type {
 } from '@jamo/core';
 import { DocxFile } from '@jamo/docx';
 import { Hwp5File } from '@jamo/hwp5';
+import { validatePackage } from '@jamo/opc';
 import { HwpxFile } from '@jamo/hwpx';
 import { PptxFile } from '@jamo/pptx';
 import {
@@ -91,6 +92,8 @@ export interface SessionApi {
 
   save: () => Promise<void>;
   saveAsFormat: (kind: 'hwpx' | 'docx' | 'pptx') => Promise<void>;
+  /** 같은 형식 그대로 새 파일로. 원본은 건드리지 않는다. */
+  saveCopyAs: () => Promise<void>;
 
   undo: () => void;
   redo: () => void;
@@ -320,6 +323,32 @@ export function useSession(): SessionApi {
 
   // --------------------------------------------------------------------- 저장
 
+  /**
+   * 내보내기 직전에 얼개를 훑는다.
+   *
+   * 저장한 파일이 다른 프로그램에서 "손상된 문서입니다" 로 뜨는 건 대개
+   * 내용이 아니라 관계·형식 선언이 어긋난 것이다. 그걸 사용자가 한쇼에서
+   * 발견하게 두면 어디가 문제인지 알 길이 없다. 여기서 먼저 걸러 이름을
+   * 붙여 준다. 저장 자체는 막지 않는다 — 파일을 손에 쥐고 있어야
+   * 무엇이 잘못됐는지 알아볼 수 있다.
+   */
+  const checkPackage = useCallback((kind: DocumentKind, data: Uint8Array) => {
+    if (kind === 'hwp5') return;
+    try {
+      const errors = validatePackage(data).filter((f) => f.kind === 'error');
+      if (errors.length === 0) return;
+      const lines = errors.slice(0, 5).map((f) => `· [${f.where}] ${f.what}`);
+      if (errors.length > lines.length) lines.push(`· 그 밖에 ${errors.length - lines.length}건`);
+      setError(
+        `저장한 파일의 얼개에 문제가 있습니다. 다른 프로그램이 거부할 수 있습니다.\n` +
+          `${lines.join('\n')}\n` +
+          `이 메시지를 그대로 알려 주시면 고치겠습니다.`,
+      );
+    } catch {
+      // 검사 자체가 실패해도 저장은 계속한다.
+    }
+  }, []);
+
   const save = useCallback(async () => {
     const doc = docRef.current;
     const current = state;
@@ -327,6 +356,7 @@ export function useSession(): SessionApi {
     setBusy(true);
     try {
       const data = doc.file.save();
+      checkPackage(doc.kind, data);
       const handle = handleRef.current;
       if (handle && (await writeToHandle(handle, data))) {
         setState((s) => (s ? { ...s, dirty: false } : s));
@@ -340,7 +370,35 @@ export function useSession(): SessionApi {
     } finally {
       setBusy(false);
     }
-  }, [state]);
+  }, [state, checkPackage]);
+
+  /**
+   * 다른 이름으로 저장.
+   *
+   * 형식을 바꾸지 않는다 — 열었던 그대로 새 파일에 쓴다. 변환 메뉴로
+   * 같은 형식을 고르면 결과는 같지만, 그건 "변환" 이라는 이름 때문에
+   * 원본이 달라질 것처럼 보인다. 사본을 남기려는 사람에게 필요한 건
+   * 이쪽이다.
+   *
+   * 원본 핸들은 바꾸지 않는다. 사본을 만든 뒤 Ctrl+S 하면 계속 원본에
+   * 저장되는 쪽이 덜 놀랍다.
+   */
+  const saveCopyAs = useCallback(async () => {
+    const doc = docRef.current;
+    const current = state;
+    if (!doc || !current || doc.kind === 'hwp5') return;
+    setBusy(true);
+    try {
+      const data = doc.file.save();
+      checkPackage(doc.kind, data);
+      const base = replaceExtension(current.name, '');
+      await saveAs(data, `${base} 사본${EXTENSION[doc.kind]}`, doc.kind);
+    } catch (cause) {
+      setError(`저장하지 못했습니다: ${(cause as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [state, checkPackage]);
 
   const saveAsFormat = useCallback(
     async (kind: 'hwpx' | 'docx' | 'pptx') => {
@@ -350,6 +408,7 @@ export function useSession(): SessionApi {
       setBusy(true);
       try {
         const data = exportAs(doc, kind);
+        checkPackage(kind, data);
         await saveAs(data, replaceExtension(current.name, EXTENSION[kind]), kind);
       } catch (cause) {
         setError(`변환하지 못했습니다: ${(cause as Error).message}`);
@@ -691,6 +750,7 @@ export function useSession(): SessionApi {
     dismissError,
     save,
     saveAsFormat,
+    saveCopyAs,
     undo,
     redo,
     setParagraphText,

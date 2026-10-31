@@ -89,6 +89,15 @@ export function Toolbar({
             >
               저장{state.dirty ? ' •' : ''}
             </button>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => void session.saveCopyAs()}
+              disabled={session.busy || state.readOnly}
+              title="형식은 그대로 두고 새 파일로 저장합니다 (Ctrl+Shift+S)"
+            >
+              다른 이름으로
+            </button>
             <Menu label="변환 ▾">
               {(close) => (
                 <>

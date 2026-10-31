@@ -49,6 +49,9 @@ export function App(): JSX.Element {
         case 'save':
           void session.save();
           break;
+        case 'saveCopyAs':
+          void session.saveCopyAs();
+          break;
         case 'saveAsHwpx':
           void session.saveAsFormat('hwpx');
           break;

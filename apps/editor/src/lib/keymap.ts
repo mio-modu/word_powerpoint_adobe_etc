@@ -14,6 +14,7 @@
 export type CommandId =
   | 'open'
   | 'save'
+  | 'saveCopyAs'
   | 'saveAsHwpx'
   | 'saveAsDocx'
   | 'saveAsPptx'
@@ -77,6 +78,7 @@ export interface CommandInfo {
 export const COMMANDS: CommandInfo[] = [
   { id: 'open', label: '파일 열기', group: '파일' },
   { id: 'save', label: '저장', group: '파일' },
+  { id: 'saveCopyAs', label: '다른 이름으로 저장', group: '파일' },
   { id: 'saveAsHwpx', label: '한글 .hwpx 로 내보내기', group: '파일' },
   { id: 'saveAsDocx', label: '워드 .docx 로 내보내기', group: '파일' },
   { id: 'saveAsPptx', label: '파워포인트 .pptx 로 내보내기', group: '파일' },
@@ -129,6 +131,7 @@ export const BINDINGS: KeyBinding[] = [
   { command: 'open', key: 'ctrl+o', origin: '공통' },
   { command: 'save', key: 'ctrl+s', origin: '공통' },
   { command: 'save', key: 'alt+s', origin: '한글' },
+  { command: 'saveCopyAs', key: 'ctrl+shift+s', origin: '공통' },
 
   { command: 'undo', key: 'ctrl+z', origin: '공통' },
   { command: 'redo', key: 'ctrl+y', origin: '워드' },
@@ -137,7 +140,9 @@ export const BINDINGS: KeyBinding[] = [
   { command: 'bold', key: 'ctrl+b', origin: '공통' },
   { command: 'italic', key: 'ctrl+i', origin: '공통' },
   { command: 'underline', key: 'ctrl+u', origin: '공통' },
-  { command: 'strike', key: 'ctrl+shift+s', origin: '자모' },
+  // Ctrl+Shift+S 는 어느 프로그램에서나 '다른 이름으로 저장'이다.
+  // 취소선은 우리가 임의로 정했던 키라 이쪽을 비켜 준다.
+  { command: 'strike', key: 'ctrl+alt+s', origin: '자모' },
   { command: 'superscript', key: 'alt+shift+=', origin: '한글' },
   { command: 'subscript', key: 'alt+shift+-', origin: '한글' },
   { command: 'fontSizeUp', key: 'ctrl+]', origin: '한글' },

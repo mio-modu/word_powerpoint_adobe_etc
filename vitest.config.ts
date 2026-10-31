@@ -5,7 +5,8 @@ const pkg = (name: string): string =>
 
 export default defineConfig({
   test: {
-    include: ['packages/*/test/**/*.test.ts'],
+    // 앱 쪽에도 단위 테스트가 있다 (단축키 표처럼 브라우저가 필요 없는 것들).
+    include: ['packages/*/test/**/*.test.ts', 'apps/*/test/**/*.test.ts'],
     environment: 'node',
   },
   resolve: {
