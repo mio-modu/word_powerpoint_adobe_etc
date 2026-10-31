@@ -330,8 +330,10 @@ await page.mouse.up();
 await page.waitForTimeout(350);
 const bigger = await measure();
 check('위로 끌면 메모판이 커진다', bigger.notes > start.notes + 70, `${start.notes} → ${bigger.notes}`);
-check('그만큼 슬라이드가 줄어든다', bigger.slide < start.slide, `${start.slide} → ${bigger.slide}`);
-check('커져도 화면 안에 있다', bigger.bottom <= bigger.view, `${bigger.bottom} / ${bigger.view}`);
+// 폭 맞춤에서는 장표 폭이 그대로여야 한다. 메모판을 조금 끌 때마다
+// 장표가 가로세로로 같이 줄었다 늘었다 하면 화면이 출렁여 못 쓴다.
+check('장표 폭은 흔들리지 않는다', bigger.slide === start.slide, `${start.slide} → ${bigger.slide}`);
+check('커져도 메모판이 화면 안에 있다', bigger.bottom <= bigger.view, `${bigger.bottom} / ${bigger.view}`);
 
 // 끝까지 아래로 끌어도 메모판이 없어지면 안 된다.
 const grip2 = await page.locator('.notes-splitter').boundingBox();
@@ -355,18 +357,58 @@ console.log('\n[확대 조절]');
 const zoomSize = () =>
   page.evaluate(() => {
     const sl = document.querySelector('.deck-canvas .slide')?.getBoundingClientRect();
-    return { w: sl ? Math.round(sl.width) : 0, label: document.querySelector('.zoom-value')?.textContent };
+    const box = document.querySelector('.deck-canvas');
+    return {
+      w: sl ? Math.round(sl.width) : 0,
+      h: sl ? Math.round(sl.height) : 0,
+      canvas: box ? Math.round(box.clientWidth) : 0,
+      canvasH: box ? Math.round(box.clientHeight) : 0,
+      label: document.querySelector('.zoom-value')?.textContent,
+    };
   });
 const fit = await zoomSize();
-check('기본은 화면 맞춤이다', fit.label === '맞춤', String(fit.label));
+check('기본은 폭 맞춤이다', fit.label === '폭 맞춤', String(fit.label));
+check('폭 맞춤은 남은 폭을 거의 다 쓴다', fit.w >= fit.canvas - 24, `장표 ${fit.w}px / 자리 ${fit.canvas}px`);
+
 await page.getByTitle('슬라이드 키우기 (Ctrl+=)').click();
 await page.waitForTimeout(350);
 const zoomed = await zoomSize();
 check('＋ 를 누르면 커진다', zoomed.w > fit.w, `${fit.w} → ${zoomed.w}px`);
-await page.getByTitle('화면에 맞추기 (Ctrl+0)').click();
+
+// 확대해 둔 상태에서 누르면 먼저 맞춤으로 돌아온다.
+await page.locator('.zoom-value').click();
 await page.waitForTimeout(350);
 const back = await zoomSize();
-check('맞춤을 누르면 되돌아온다', Math.abs(back.w - fit.w) <= 2, `${zoomed.w} → ${back.w}px`);
+check('가운데 단추로 맞춤 크기로 되돌아온다', Math.abs(back.w - fit.w) <= 2, `${zoomed.w} → ${back.w}px`);
+
+// 두 모드의 차이는 "세로가 모자랄 때" 드러난다. 메모판을 크게 해서
+// 장표 자리를 낮춘 다음 비교한다. 자리가 넉넉하면 둘은 같은 결과를 낸다.
+const grip3 = await page.locator('.notes-splitter').boundingBox();
+await page.mouse.move(grip3.x + grip3.width / 2, grip3.y + grip3.height / 2);
+await page.mouse.down();
+await page.mouse.move(grip3.x + grip3.width / 2, grip3.y - 260, { steps: 12 });
+await page.mouse.up();
+await page.waitForTimeout(400);
+
+const tall = await zoomSize();
+check(
+  '폭 맞춤은 자리가 모자라도 폭을 지킨다 (세로로 굴려 본다)',
+  tall.w === back.w && tall.h > tall.canvasH,
+  `장표 ${tall.w}×${tall.h} / 자리 세로 ${tall.canvasH}px`,
+);
+
+// 한 번 더 누르면 화면 맞춤으로 바뀐다.
+await page.locator('.zoom-value').click();
+await page.waitForTimeout(400);
+const screen = await zoomSize();
+check('한 번 더 누르면 화면 맞춤이 된다', screen.label === '화면 맞춤', String(screen.label));
+check('화면 맞춤은 장표 전체가 세로에 들어온다', screen.h <= screen.canvasH + 1, `${screen.h} / ${screen.canvasH}px`);
+check('화면 맞춤에서는 폭을 줄여 전체를 보여 준다', screen.w < tall.w, `${tall.w} → ${screen.w}px`);
+
+// 폭 맞춤으로 되돌려 둔다.
+await page.locator('.zoom-value').click();
+await page.waitForTimeout(350);
+check('다시 누르면 폭 맞춤으로 돌아온다', (await zoomSize()).label === '폭 맞춤');
 
 console.log('\n[장 번호와 삭제는 위 도구막대에]');
 check('장 번호가 도구막대에 있다', (await page.locator('.slide-counter').count()) === 1,

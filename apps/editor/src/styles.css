@@ -398,6 +398,9 @@ button.ghost {
   flex: 1;
   width: 100%;
   min-height: 0;
+  /* 굴림막대가 생기고 사라질 때 폭이 15px 씩 출렁이지 않게 자리를 미리 비워 둔다.
+     폭 맞춤에서는 장표 폭이 이 칸의 폭이라, 막대가 폭을 건드리면 그대로 티가 난다. */
+  scrollbar-gutter: stable;
 }
 
 .deck-canvas > * {
@@ -1227,7 +1230,7 @@ kbd {
 }
 
 .zoom-value {
-  min-width: 52px;
+  min-width: 74px;
 }
 
 .slide-counter {

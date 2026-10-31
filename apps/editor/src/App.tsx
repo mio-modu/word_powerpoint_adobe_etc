@@ -29,6 +29,9 @@ export function App(): JSX.Element {
   const [notesOpen, setNotesOpen] = useState(true);
   // undefined 면 발표 중이 아니다. 숫자면 그 장부터 보여 준다.
   const [presentFrom, setPresentFrom] = useState<number | undefined>(undefined);
+  // 기본은 좌우 폭 맞춤. 파워포인트를 쓰던 손에 그쪽이 익숙하고,
+  // 메모판을 끌어도 장표 폭이 흔들리지 않는다.
+  const [deckFit, setDeckFit] = useState<'width' | 'screen'>('width');
   const pendingKey = useRef<string | undefined>(undefined);
   const pendingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const fileSystemAccess = supportsFileSystemAccess();
@@ -276,6 +279,8 @@ export function App(): JSX.Element {
         slideIndex={slideIndex}
         slideCount={presentation?.slides.length ?? 0}
         onRemoveSlide={session.removeSlide}
+        fit={deckFit}
+        onFitChange={setDeckFit}
       />
 
       {state && !state.readOnly && (
@@ -324,6 +329,7 @@ export function App(): JSX.Element {
             onToggleNotes={() => setNotesOpen((open) => !open)}
             onPresent={setPresentFrom}
             zoom={zoom}
+            fit={deckFit}
           />
         )}
 

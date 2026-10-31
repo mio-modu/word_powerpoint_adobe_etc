@@ -41,14 +41,20 @@ export interface SlideDeckViewProps {
   onToggleNotes: () => void;
   /** 이 장부터 발표 시작. */
   onPresent: (fromIndex: number) => void;
-  /** 1 이면 화면에 꽉 맞춘 크기. 그보다 크면 넘치는 만큼 굴려 본다. */
+  /** 1 이면 맞춤 크기. 그보다 크면 넘치는 만큼 굴려 본다. */
   zoom: number;
+  /**
+   * 'width' — 좌우 폭에 맞춘다. 메모판을 끌어도 **폭이 그대로**이고
+   *   세로만 보이는 만큼 달라진다. 파워포인트의 기본 느낌이다.
+   * 'screen' — 장표 전체가 한눈에 들어오게 맞춘다.
+   */
+  fit: 'width' | 'screen';
 }
 
 /** 남은 자리를 다 써도 이보다는 작게 그리지 않는다. */
 const SLIDE_MIN_WIDTH_PX = 320;
 /** 넓은 화면에서 끝없이 커지지 않게. */
-const SLIDE_MAX_WIDTH_PX = 1600;
+const SLIDE_MAX_WIDTH_PX = 2000;
 
 /** 메모판 기본 높이. 파워포인트의 메모 칸과 비슷한 정도. */
 // 기본값은 장표 쪽에 넉넉히 준다. 메모를 많이 쓸 때는 경계선을 끌면 되고,
@@ -386,6 +392,7 @@ export function SlideDeckView({
   onToggleNotes,
   onPresent,
   zoom,
+  fit,
 }: SlideDeckViewProps): JSX.Element {
   const index = Math.min(current, Math.max(deck.slides.length - 1, 0));
   const slide = deck.slides[index];
@@ -457,16 +464,26 @@ export function SlideDeckView({
     storeNotesHeight(effectiveNotesHeight);
   }, [effectiveNotesHeight]);
   const aspect = hwpunit.toPx(deck.slideSize.width) / hwpunit.toPx(deck.slideSize.height);
-  const fittedWidth = Math.max(
-    SLIDE_MIN_WIDTH_PX,
-    Math.min(
-      SLIDE_MAX_WIDTH_PX,
-      // 아직 재기 전(0)에는 적당한 값으로 한 번 그린다.
-      canvasBox.width > 0 ? Math.min(canvasBox.width, canvasBox.height * aspect) : 960,
-    ),
-  );
-  // 맞춤 크기에 확대 배율을 곱한다. 1 이면 화면에 꽉 맞는 크기다.
+
+  // 폭 맞춤에서는 **세로를 보지 않는다**. 그래야 메모판을 끌어 높이가
+  // 달라져도 장표 폭이 그대로다. 높이까지 함께 보면 메모판을 조금 끌 때마다
+  // 장표가 가로세로로 같이 줄었다 늘었다 해서 화면이 출렁인다.
+  //
+  // 대신 장표가 세로로 넘칠 수 있으므로 그 자리를 굴려 볼 수 있게 한다.
+  // 전체를 한눈에 보고 싶으면 '화면 맞춤' 으로 바꾸면 된다.
+  const available = canvasBox.width > 0 ? canvasBox.width : 960;
+  const base =
+    fit === 'width'
+      ? available
+      : Math.min(available, (canvasBox.height > 0 ? canvasBox.height : 540) * aspect);
+
+  const fittedWidth = Math.max(SLIDE_MIN_WIDTH_PX, Math.min(SLIDE_MAX_WIDTH_PX, base));
   const slideWidth = Math.round(fittedWidth * zoom);
+  const slideHeight = slideWidth / aspect;
+
+  // 넘칠 때만 굴림막대를 쓴다. 딱 맞을 때 켜 두면 반올림 때문에
+  // 막대가 생겼다 사라졌다 하며 폭이 떨린다.
+  const overflows = slideHeight > canvasBox.height + 1 || slideWidth > canvasBox.width + 1;
 
   return (
     <div className="deck">
@@ -510,7 +527,7 @@ export function SlideDeckView({
             <div
               className="deck-canvas"
               ref={canvasRef}
-              style={{ overflow: zoom > 1 ? 'auto' : 'hidden' }}
+              style={{ overflow: overflows ? 'auto' : 'hidden' }}
             >
               <SlideCanvas
                 slide={slide}

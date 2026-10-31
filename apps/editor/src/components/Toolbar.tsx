@@ -19,6 +19,9 @@ export interface ToolbarProps {
   slideIndex: number;
   slideCount: number;
   onRemoveSlide: (index: number) => void;
+  /** 슬라이드를 좌우 폭에 맞출지, 전체가 한눈에 들어오게 맞출지. */
+  fit: 'width' | 'screen';
+  onFitChange: (fit: 'width' | 'screen') => void;
 }
 
 export function Toolbar({
@@ -33,6 +36,8 @@ export function Toolbar({
   slideIndex,
   slideCount,
   onRemoveSlide,
+  fit,
+  onFitChange,
 }: ToolbarProps): JSX.Element {
   const { state } = session;
   const isDeck = state?.kind === 'pptx';
@@ -177,10 +182,23 @@ export function Toolbar({
             <button
               type="button"
               className="zoom-value"
-              title={isDeck ? '화면에 맞추기 (Ctrl+0)' : '100% 로 (Ctrl+0)'}
-              onClick={() => onZoomChange(1)}
+              title={
+                isDeck
+                  ? zoom !== 1
+                    ? '맞춤 크기로 되돌리기 (Ctrl+0)'
+                    : fit === 'width'
+                      ? '지금은 좌우 폭에 맞춥니다. 눌러서 장표 전체가 한눈에 들어오게 바꿉니다.'
+                      : '지금은 장표 전체를 보여 줍니다. 눌러서 좌우 폭에 맞춥니다.'
+                  : '100% 로 (Ctrl+0)'
+              }
+              onClick={() => {
+                // 확대해 둔 상태면 먼저 맞춤으로 되돌린다. 그 다음부터
+                // 누르면 폭 맞춤 ↔ 화면 맞춤이 번갈아 바뀐다.
+                if (zoom !== 1) onZoomChange(1);
+                else if (isDeck) onFitChange(fit === 'width' ? 'screen' : 'width');
+              }}
             >
-              {isDeck && zoom === 1 ? '맞춤' : `${Math.round(zoom * 100)}%`}
+              {isDeck && zoom === 1 ? (fit === 'width' ? '폭 맞춤' : '화면 맞춤') : `${Math.round(zoom * 100)}%`}
             </button>
             <button
               type="button"
