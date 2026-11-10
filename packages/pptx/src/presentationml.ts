@@ -10,6 +10,7 @@ import {
   type HorizontalAlign,
   type ParagraphStyle,
   type XmlElement,
+  cloneNode,
 } from '@jamo/core';
 
 /**
@@ -233,20 +234,165 @@ export function setRunText(run: XmlElement, value: string): void {
   }
 }
 
-/** 문단 텍스트를 첫 런의 서식으로 통일해 바꾼다. */
+/**
+ * 문단의 글자만 바꾼다. 나머지는 최대한 그대로 둔다.
+ *
+ * 예전에는 문단을 통째로 다시 만들었다. 그러면 `a:pPr` 이 사라져 글머리표와
+ * 정렬과 들여쓰기가 날아가고, 런이 하나로 합쳐져 한 줄 안에 섞여 있던
+ * 색과 크기가 첫 런 것으로 통일됐다. 한 글자만 고쳐도 그랬다.
+ *
+ * 지금은 런이 하나뿐이면 그 런의 글자만 갈아 끼운다 — 서식이 1바이트도
+ * 바뀌지 않는다. 가장 흔한 경우다. 런이 여럿일 때는 평문 한 줄로는
+ * 어느 글자가 어느 런인지 알 수 없으므로 첫 런만 남긴다.
+ */
 export function setParagraphText(p: XmlElement, value: string): void {
   const runs = paragraphRuns(p);
-  const pPr = firstChild(p, 'a:pPr');
-  if (runs.length === 0) {
-    const rebuilt = buildParagraph([{ text: value }]);
-    p.children = pPr ? [pPr, ...rebuilt.children.filter((c) => c !== pPr)] : rebuilt.children;
+
+  if (value.includes('\n')) {
+    // 줄바꿈은 a:br 로 쪼개야 한다. a:t 안에 생 줄바꿈을 넣으면 파워포인트가
+    // 줄로 보지 않고 공백처럼 다룬다. 이때만 문단을 다시 짠다.
+    const endPr = firstChild(p, 'a:endParaRPr');
+    const style = runs[0] ? readRunStyle(runs[0]) : endPr ? readRunStyle(endPr) : undefined;
+    const pPr = firstChild(p, 'a:pPr');
+    const rebuilt = buildParagraph([{ text: value, style }]);
+    p.children = pPr ? [pPr, ...rebuilt.children] : rebuilt.children;
     p.selfClosed = false;
     return;
   }
-  const style = readRunStyle(runs[0]!);
-  const rebuilt = buildParagraph([{ text: value, style }]);
-  p.children = pPr ? [pPr, ...rebuilt.children] : rebuilt.children;
+
+  if (runs.length === 1) {
+    setRunText(runs[0]!, value);
+    return;
+  }
+
+  if (runs.length === 0) {
+    // 빈 문단. a:endParaRPr 이 다음에 칠 글자의 서식을 들고 있으므로
+    // 그걸 그대로 써서 런을 만든다. PowerPoint 도 그렇게 한다.
+    const endPr = firstChild(p, 'a:endParaRPr');
+    const run = buildRun(value, endPr ? readRunStyle(endPr) : undefined);
+    if (endPr) {
+      // endParaRPr 은 늘 맨 끝이어야 한다.
+      p.children.splice(p.children.indexOf(endPr), 0, run);
+    } else {
+      p.children.push(run);
+    }
+    p.selfClosed = false;
+    return;
+  }
+
+  // 런이 여럿: 첫 런에 글을 넣고 나머지 런과 줄바꿈을 걷어낸다.
+  setRunText(runs[0]!, value);
+  const drop = new Set<XmlElement>(runs.slice(1));
+  p.children = p.children.filter((child) => {
+    if (child.kind !== 'element') return true;
+    if (drop.has(child)) return false;
+    return child.name !== 'a:br';
+  });
   p.selfClosed = false;
+}
+
+/**
+ * 고치기 전 줄과 고친 뒤 줄을 짝지어 준다.
+ *
+ * 왜 필요한가: 평문 여러 줄로 글상자를 고치면 "몇 번째 줄" 밖에 알 수 없다.
+ * 위치로만 맞추면 가운데에 한 줄을 넣는 순간 아래 줄들의 서식이 한 칸씩
+ * 밀린다 — 제목 서식의 줄이 본문 자리로 내려앉는다.
+ *
+ * 그래서 가장 긴 공통 부분(LCS)으로 어느 줄이 어느 줄인지 먼저 맞춘다.
+ * 그리고 지움과 넣음이 맞붙어 있으면 "고쳐 쓴 줄"로 본다 — 오타 하나
+ * 고친 경우가 그렇고, 그래야 그 줄의 서식이 살아남는다.
+ */
+export type LineOp =
+  | { kind: 'keep'; from: number; text: string }
+  | { kind: 'replace'; from: number; text: string }
+  | { kind: 'insert'; text: string };
+
+export function alignLines(before: readonly string[], after: readonly string[]): LineOp[] {
+  const n = before.length;
+  const m = after.length;
+
+  // 공통 부분 길이표. 줄 수가 많아야 수십이라 이 정도면 넉넉하다.
+  const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      lcs[i]![j] =
+        before[i] === after[j]
+          ? lcs[i + 1]![j + 1]! + 1
+          : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!);
+    }
+  }
+
+  // 되짚어 가며 유지/지움/넣음을 적는다.
+  type Raw = { kind: 'keep'; from: number; text: string } | { kind: 'drop'; from: number } | { kind: 'insert'; text: string };
+  const raw: Raw[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (before[i] === after[j]) {
+      raw.push({ kind: 'keep', from: i, text: after[j]! });
+      i += 1;
+      j += 1;
+    } else if (lcs[i + 1]![j]! >= lcs[i]![j + 1]!) {
+      raw.push({ kind: 'drop', from: i });
+      i += 1;
+    } else {
+      raw.push({ kind: 'insert', text: after[j]! });
+      j += 1;
+    }
+  }
+  while (i < n) {
+    raw.push({ kind: 'drop', from: i });
+    i += 1;
+  }
+  while (j < m) {
+    raw.push({ kind: 'insert', text: after[j]! });
+    j += 1;
+  }
+
+  // 맞붙은 지움·넣음을 "고쳐 쓴 줄" 로 묶는다.
+  const out: LineOp[] = [];
+  for (let k = 0; k < raw.length; ) {
+    const item = raw[k]!;
+    if (item.kind !== 'drop') {
+      if (item.kind === 'keep') out.push(item);
+      else out.push({ kind: 'insert', text: item.text });
+      k += 1;
+      continue;
+    }
+    // 이어지는 지움과 넣음을 모아 앞에서부터 짝지운다.
+    const drops: number[] = [];
+    while (k < raw.length && raw[k]!.kind === 'drop') {
+      drops.push((raw[k] as { from: number }).from);
+      k += 1;
+    }
+    const inserts: string[] = [];
+    while (k < raw.length && raw[k]!.kind === 'insert') {
+      inserts.push((raw[k] as { text: string }).text);
+      k += 1;
+    }
+    const paired = Math.min(drops.length, inserts.length);
+    for (let d = 0; d < paired; d += 1) {
+      out.push({ kind: 'replace', from: drops[d]!, text: inserts[d]! });
+    }
+    for (let d = paired; d < inserts.length; d += 1) {
+      out.push({ kind: 'insert', text: inserts[d]! });
+    }
+    // 짝 못 찾은 지움은 그냥 없어진다.
+  }
+  return out;
+}
+
+/**
+ * 문단을 본떠 같은 서식의 새 문단을 만든다.
+ *
+ * 줄을 더할 때 쓴다. 맨 앞부터 새로 만들면 글머리표가 붙은 목록 가운데에
+ * 글머리표 없는 줄이 끼어든다.
+ */
+export function paragraphLike(model: XmlElement | undefined, text: string): XmlElement {
+  if (!model) return buildParagraph([{ text }]);
+  const copy = cloneNode(model);
+  setParagraphText(copy, text);
+  return copy;
 }
 
 export interface ShapeFrame {

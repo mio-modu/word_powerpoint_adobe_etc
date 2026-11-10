@@ -41,6 +41,8 @@ import {
   buildParagraph,
   buildRunProps,
   buildTextBox,
+  alignLines,
+  paragraphLike,
   paragraphRuns,
   paragraphText,
   readFrame,
@@ -384,21 +386,52 @@ export class PptxFile {
   }
 
   /** 도형의 텍스트 전체를 줄 단위로 바꾼다. */
+  /**
+   * 도형의 글을 줄 단위로 바꾼다. **건드린 줄만 건드린다.**
+   *
+   * 예전에는 도형 전체를 첫 런의 서식으로 다시 만들었다. 그러면 한 글자만
+   * 고쳐도 `a:pPr` 이 사라져 글머리표·정렬·들여쓰기가 날아가고, 한 줄 안에
+   * 섞여 있던 색과 크기가 하나로 통일됐다. 화면에서는 티가 안 나다가
+   * 파워포인트에서 열어 보면 전혀 다른 장표가 되어 있었다.
+   *
+   * 지금은 이렇게 한다.
+   *  - 글이 그대로인 줄은 **손대지 않는다** (XML 이 1바이트도 안 바뀐다)
+   *  - 글이 바뀐 줄은 그 줄의 글자만 갈아 끼운다
+   *  - 줄이 늘면 바로 앞 줄을 본떠 만든다 — 목록 가운데에 글머리표 없는
+   *    줄이 끼어들지 않게
+   *  - 줄이 줄면 뒤에서부터 버린다
+   */
   static setShapeText(sp: XmlElement, lines: string[]): void {
     const txBody = firstChild(sp, 'p:txBody');
     if (!txBody) throw new PptxError('텍스트를 담을 수 없는 도형입니다 (p:txBody 없음)');
-    const bodyPr = firstChild(txBody, 'a:bodyPr');
-    const lstStyle = firstChild(txBody, 'a:lstStyle');
-    const firstPara = childElements(txBody, 'a:p')[0];
-    const style = firstPara ? readRunStyle(paragraphRuns(firstPara)[0] ?? firstPara) : undefined;
 
-    const head: XmlElement[] = [];
-    if (bodyPr) head.push(bodyPr);
-    if (lstStyle) head.push(lstStyle);
-    txBody.children = [
-      ...head,
-      ...(lines.length > 0 ? lines : ['']).map((text) => buildParagraph([{ text, style }])),
-    ];
+    const existing = childElements(txBody, 'a:p');
+    const wanted = lines.length > 0 ? lines : [''];
+
+    // 어느 줄이 어느 줄인지 먼저 맞춘다. 위치로만 맞추면 가운데에 한 줄을
+    // 넣는 순간 아래 줄들의 서식이 한 칸씩 밀린다.
+    const paragraphs: XmlElement[] = [];
+    for (const op of alignLines(existing.map((p) => paragraphText(p)), wanted)) {
+      if (op.kind === 'keep') {
+        // 글이 그대로인 줄은 아예 건드리지 않는다.
+        paragraphs.push(existing[op.from]!);
+      } else if (op.kind === 'replace') {
+        const p = existing[op.from]!;
+        setParagraphText(p, op.text);
+        paragraphs.push(p);
+      } else {
+        // 새 줄은 바로 앞 줄(없으면 원래 첫 줄)을 본뜬다.
+        const model = paragraphs[paragraphs.length - 1] ?? existing[0];
+        paragraphs.push(paragraphLike(model, op.text));
+      }
+    }
+
+    // bodyPr·lstStyle 같은 앞머리는 그대로 둔다. 스키마가 순서를 정해 두었고,
+    // 여기엔 도형의 글자 기본값이 들어 있어 버리면 모양이 달라진다.
+    const head = txBody.children.filter(
+      (child) => child.kind !== 'element' || child.name !== 'a:p',
+    );
+    txBody.children = [...head, ...paragraphs];
     txBody.selfClosed = false;
   }
 
